@@ -1,0 +1,12 @@
+{"type":"system","subtype":"init","session_id":"sess-multi","model":"claude-sonnet-4-6"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"I need to spawn two agents"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"I need to spawn two agents"},{"type":"text","text":"Let me dispatch two agents in parallel."},{"type":"tool_use","id":"toolu_agentA","name":"Agent","input":{"prompt":"search codebase","description":"search"}},{"type":"tool_use","id":"toolu_agentB","name":"Agent","input":{"prompt":"run tests","description":"test"}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Searching the codebase..."}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Searching the codebase..."},{"type":"tool_use","id":"toolu_grep1","name":"Grep","input":{"pattern":"TODO"}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Running test suite..."}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Running test suite..."},{"type":"tool_use","id":"toolu_bash1","name":"Bash","input":{"command":"npm test"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_grep1","content":"src/main.ts:42: // TODO fix this","is_error":false}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_bash1","content":"All 15 tests passed","is_error":false}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_agentA","content":"Found 1 TODO in src/main.ts","is_error":false},{"type":"tool_result","tool_use_id":"toolu_agentB","content":"All tests passing","is_error":false}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Both agents completed. Found 1 TODO and all tests pass."}]}}
+{"type":"result","subtype":"success","session_id":"sess-multi","result":"\"Both agents completed successfully.\"","total_cost_usd":0.042,"modelUsage":{"claude-sonnet-4-6":{"inputTokens":800,"outputTokens":200,"cacheReadInputTokens":5000,"cacheCreationInputTokens":0,"contextWindow":200000}}}

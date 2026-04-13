@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="360" viewBox="0 0 680 360">
+  <rect width="680" height="360" rx="12" fill="#1e1e2e"/>
+  <rect x="20" y="14" width="10" height="10" rx="5" fill="#f38ba8"/>
+  <rect x="38" y="14" width="10" height="10" rx="5" fill="#f9e2af"/>
+  <rect x="56" y="14" width="10" height="10" rx="5" fill="#a6e3a1"/>
+
+  <text font-family="ui-monospace,SFMono-Regular,Menlo,Monaco,monospace" font-size="15" fill="#cdd6f4">
+    <tspan x="24" y="56" fill="#89b4fa">import</tspan><tspan fill="#cdd6f4"> { </tspan><tspan fill="#f9e2af">claude</tspan><tspan fill="#cdd6f4"> } </tspan><tspan fill="#89b4fa">from</tspan><tspan fill="#a6e3a1"> "claude-wire"</tspan><tspan fill="#cdd6f4">;</tspan>
+    <tspan x="24" y="84"></tspan>
+    <tspan x="24" y="112" fill="#89b4fa">const</tspan><tspan fill="#cdd6f4"> result = </tspan><tspan fill="#89b4fa">await</tspan><tspan fill="#f9e2af"> claude</tspan><tspan fill="#cdd6f4">.</tspan><tspan fill="#89dceb">ask</tspan><tspan fill="#cdd6f4">(</tspan><tspan fill="#a6e3a1">"Fix the bug"</tspan><tspan fill="#cdd6f4">, {</tspan>
+    <tspan x="44" y="138" fill="#cdd6f4">model: </tspan><tspan fill="#a6e3a1">"haiku"</tspan><tspan fill="#cdd6f4">,</tspan>
+    <tspan x="44" y="164" fill="#cdd6f4">maxCostUsd: </tspan><tspan fill="#fab387">0.50</tspan><tspan fill="#cdd6f4">,</tspan>
+    <tspan x="24" y="190" fill="#cdd6f4">});</tspan>
+    <tspan x="24" y="222"></tspan>
+    <tspan x="24" y="250" fill="#cdd6f4">result.</tspan><tspan fill="#89dceb">text</tspan><tspan fill="#cdd6f4">     </tspan><tspan fill="#6c7086">// "Fixed the undefined..."</tspan>
+    <tspan x="24" y="278" fill="#cdd6f4">result.</tspan><tspan fill="#89dceb">costUsd</tspan><tspan fill="#cdd6f4">  </tspan><tspan fill="#6c7086">// 0.0084</tspan>
+    <tspan x="24" y="306" fill="#cdd6f4">result.</tspan><tspan fill="#89dceb">tokens</tspan><tspan fill="#cdd6f4">   </tspan><tspan fill="#6c7086">// { input: 31570, output: 205 }</tspan>
+    <tspan x="24" y="334" fill="#cdd6f4">result.</tspan><tspan fill="#89dceb">duration</tspan><tspan fill="#cdd6f4"> </tspan><tspan fill="#6c7086">// 4905ms</tspan>
+  </text>
+</svg>

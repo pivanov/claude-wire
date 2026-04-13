@@ -1,0 +1,10 @@
+{
+  "name": "examples",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "claude-wire": "workspace:*",
+    "@inquirer/prompts": "^7.0.0"
+  }
+}
