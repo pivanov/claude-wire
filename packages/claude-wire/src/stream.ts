@@ -1,17 +1,15 @@
-import { LIMITS, TIMEOUTS } from "./constants.js";
 import { createCostTracker } from "./cost.js";
-import { AbortError, ClaudeError, ProcessError, TimeoutError } from "./errors.js";
-import { parseLine } from "./parser/ndjson.js";
+import { AbortError, ClaudeError, ProcessError } from "./errors.js";
 import { createTranslator } from "./parser/translator.js";
-import { buildResult, dispatchToolDecision, extractText } from "./pipeline.js";
+import { buildResult, extractText } from "./pipeline.js";
 import { spawnClaude } from "./process.js";
+import { readNdjsonEvents } from "./reader.js";
 import { createToolHandler } from "./tools/handler.js";
 import type { TRelayEvent, TSessionMetaEvent } from "./types/events.js";
 import type { IClaudeOptions } from "./types/options.js";
 import type { TAskResult, TCostSnapshot } from "./types/results.js";
-import { writer } from "./writer.js";
 
-export interface IClaudeStream extends AsyncIterable<TRelayEvent> {
+export interface IClaudeStream extends AsyncIterable<TRelayEvent>, AsyncDisposable {
   text: () => Promise<string>;
   cost: () => Promise<TCostSnapshot>;
   result: () => Promise<TAskResult>;
@@ -42,6 +40,10 @@ const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): TStderrDrain
 };
 
 export const createStream = (prompt: string, options: IClaudeOptions = {}): IClaudeStream => {
+  if (options.signal?.aborted) {
+    throw new AbortError();
+  }
+
   const proc = spawnClaude({ prompt, ...options });
   const stderr = drainStderr(proc);
   const translator = createTranslator();
@@ -51,108 +53,30 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
     onCostUpdate: options.onCostUpdate,
   });
 
-  let aborted = false;
-
-  const abortProcess = () => {
-    aborted = true;
-    try {
-      proc.write(writer.abort());
-    } catch {
-      // stdin may already be closed
-    }
-    proc.kill();
-  };
-
-  if (options.signal) {
-    if (options.signal.aborted) {
-      abortProcess();
-    } else {
-      options.signal.addEventListener("abort", abortProcess, { once: true });
-    }
-  }
-
   let cachedGenerator: AsyncGenerator<TRelayEvent> | undefined;
 
   const generate = async function* (): AsyncGenerator<TRelayEvent> {
-    const reader = proc.stdout.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+    const stdoutReader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
     let turnComplete = false;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      while (true) {
-        if (aborted) {
-          throw new AbortError();
+      for await (const event of readNdjsonEvents({
+        reader: stdoutReader,
+        translator,
+        toolHandler,
+        proc,
+        signal: options.signal,
+      })) {
+        if (event.type === "turn_complete") {
+          costTracker.update(event.costUsd ?? 0, event.inputTokens ?? 0, event.outputTokens ?? 0);
+          costTracker.checkBudget();
+          turnComplete = true;
         }
 
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new TimeoutError(`No response within ${TIMEOUTS.defaultAbortMs}ms`));
-          }, TIMEOUTS.defaultAbortMs);
-        });
-        const readResult = await Promise.race([reader.read(), timeoutPromise]);
-        clearTimeout(timeoutId);
-        const { done, value } = readResult;
-        if (done) {
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-
-        if (buffer.length > LIMITS.ndjsonMaxLineChars) {
-          throw new ClaudeError(`NDJSON buffer exceeded ${LIMITS.ndjsonMaxLineChars} chars`);
-        }
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          const raw = parseLine(line);
-          if (!raw) {
-            continue;
-          }
-
-          const events = translator.translate(raw);
-
-          for (const event of events) {
-            if (event.type === "tool_use" && toolHandler) {
-              await dispatchToolDecision(proc, toolHandler, event);
-            }
-
-            if (event.type === "turn_complete") {
-              costTracker.update(event.costUsd ?? 0, event.inputTokens ?? 0, event.outputTokens ?? 0);
-              costTracker.checkBudget();
-              turnComplete = true;
-            }
-
-            yield event;
-          }
-        }
-
-        if (turnComplete) {
-          break;
-        }
+        yield event;
       }
 
-      if (buffer.trim()) {
-        const raw = parseLine(buffer);
-        if (raw) {
-          const events = translator.translate(raw);
-          for (const event of events) {
-            if (event.type === "tool_use" && toolHandler && !turnComplete) {
-              await dispatchToolDecision(proc, toolHandler, event);
-            }
-            if (event.type === "turn_complete") {
-              costTracker.update(event.costUsd ?? 0, event.inputTokens ?? 0, event.outputTokens ?? 0);
-              costTracker.checkBudget();
-              turnComplete = true;
-            }
-            yield event;
-          }
-        }
-      }
-
-      if (!turnComplete && !aborted) {
+      if (!turnComplete) {
         const exitCode = await proc.exited;
         if (exitCode !== 0) {
           let errorMessage = `Claude process exited with code ${exitCode}`;
@@ -166,9 +90,7 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
         throw new ProcessError("Process exited without completing the turn");
       }
     } finally {
-      clearTimeout(timeoutId);
-      reader.releaseLock();
-      options.signal?.removeEventListener("abort", abortProcess);
+      stdoutReader.releaseLock();
       proc.kill();
     }
   };
@@ -207,6 +129,12 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
     return buildResult(bufferedEvents, costTracker, sessionId);
   };
 
+  const cleanup = () => {
+    if (!cachedGenerator) {
+      proc.kill();
+    }
+  };
+
   return {
     [Symbol.asyncIterator]: () => {
       if (consumePromise) {
@@ -218,5 +146,8 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
     text,
     cost,
     result,
+    [Symbol.asyncDispose]: async () => {
+      cleanup();
+    },
   };
 };

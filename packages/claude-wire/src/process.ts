@@ -199,24 +199,33 @@ export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
       }
     }
 
-    const proc = spawnProcess(args, { cwd: options.cwd, env: spawnEnv });
+    const rawProc = spawnProcess(args, { cwd: options.cwd, env: spawnEnv });
 
-    if (options.prompt) {
-      proc.stdin.write(writer.user(options.prompt));
-    }
+    rawProc.exited.catch(() => {});
 
-    return {
+    const claudeProc: IClaudeProcess = {
       write: (msg: string) => {
-        proc.stdin.write(msg);
+        rawProc.stdin.write(msg);
       },
       kill: () => {
-        proc.kill();
+        rawProc.kill();
       },
-      exited: proc.exited,
-      stdout: proc.stdout,
-      stderr: proc.stderr,
-      pid: proc.pid,
+      exited: rawProc.exited,
+      stdout: rawProc.stdout,
+      stderr: rawProc.stderr,
+      pid: rawProc.pid,
     };
+
+    if (options.prompt) {
+      try {
+        rawProc.stdin.write(writer.user(options.prompt));
+      } catch {
+        rawProc.kill();
+        throw new ProcessError("Failed to write initial prompt to process");
+      }
+    }
+
+    return claudeProc;
   } catch (error) {
     const msg = errorMessage(error);
     if (msg.includes("ENOENT") || msg.includes("not found")) {

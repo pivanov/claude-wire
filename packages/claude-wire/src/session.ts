@@ -1,11 +1,11 @@
 import { LIMITS, TIMEOUTS } from "./constants.js";
 import { createCostTracker } from "./cost.js";
-import { AbortError, ClaudeError, isTransientError, KnownError, ProcessError, TimeoutError } from "./errors.js";
-import { parseLine } from "./parser/ndjson.js";
+import { AbortError, BudgetExceededError, ClaudeError, isTransientError, KnownError, ProcessError, TimeoutError } from "./errors.js";
 import { createTranslator } from "./parser/translator.js";
-import { buildResult, dispatchToolDecision } from "./pipeline.js";
+import { buildResult } from "./pipeline.js";
 import type { IClaudeProcess } from "./process.js";
 import { spawnClaude } from "./process.js";
+import { readNdjsonEvents } from "./reader.js";
 import { createToolHandler } from "./tools/handler.js";
 import type { TRelayEvent } from "./types/events.js";
 import type { ISessionOptions } from "./types/options.js";
@@ -21,14 +21,28 @@ export interface IClaudeSession extends AsyncDisposable {
 const gracefulKill = async (p: IClaudeProcess): Promise<void> => {
   p.kill();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([
-    p.exited,
-    new Promise<void>((r) => {
-      timer = setTimeout(r, TIMEOUTS.gracefulExitMs);
-    }),
-  ]);
-  if (timer) {
-    clearTimeout(timer);
+  let timedOut = false;
+  try {
+    await Promise.race([
+      p.exited,
+      new Promise<void>((r) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          r();
+        }, TIMEOUTS.gracefulExitMs);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+  if (timedOut) {
+    try {
+      p.kill();
+    } catch {
+      // already dead
+    }
   }
 };
 
@@ -47,8 +61,6 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   let inFlight: Promise<TAskResult> | undefined;
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-  let buffer = "";
-  let decoder = new TextDecoder();
 
   const cleanupProcess = () => {
     if (reader) {
@@ -59,49 +71,55 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       }
     }
     reader = undefined;
-    buffer = "";
-    decoder = new TextDecoder();
   };
 
-  const spawnFresh = (prompt?: string, resumeId?: string) => {
-    if (consecutiveCrashes >= LIMITS.maxRespawnAttempts) {
-      if (proc) {
-        proc.kill();
-        proc.exited.catch(() => {});
-      }
-      cleanupProcess();
-      throw new ProcessError(`Process crashed ${consecutiveCrashes} times, giving up`);
-    }
-    costOffsets = costTracker.snapshot();
-    if (proc) {
-      proc.kill();
-      proc.exited.catch(() => {});
-    }
-    cleanupProcess();
-    translator.reset();
-    const spawnOpts = resumeId ? { prompt, ...options, resume: resumeId } : { prompt, ...options };
-    proc = spawnClaude(spawnOpts);
-    reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
-    drainStderr(proc);
-  };
+  let lastStderrChunks: string[] = [];
 
   const drainStderr = (p: IClaudeProcess) => {
+    const chunks: string[] = [];
+    lastStderrChunks = chunks;
     const stderrReader = p.stderr.getReader();
-    const pump = async () => {
+    const decoder = new TextDecoder();
+    (async () => {
       try {
         while (true) {
-          const { done } = await stderrReader.read();
+          const { done, value } = await stderrReader.read();
           if (done) {
             break;
           }
+          chunks.push(decoder.decode(value, { stream: true }));
         }
       } catch {
         // process exited
       } finally {
         stderrReader.releaseLock();
       }
-    };
-    pump().catch(() => {});
+    })().catch(() => {});
+  };
+
+  const getStderrText = (): string => lastStderrChunks.join("").trim();
+
+  const killProc = () => {
+    if (proc) {
+      proc.kill();
+      proc.exited.catch(() => {});
+    }
+    proc = undefined;
+    cleanupProcess();
+  };
+
+  const spawnFresh = (prompt?: string, resumeId?: string) => {
+    if (consecutiveCrashes >= LIMITS.maxRespawnAttempts) {
+      killProc();
+      throw new ProcessError(`Process crashed ${consecutiveCrashes} times, giving up`);
+    }
+    costOffsets = costTracker.snapshot();
+    killProc();
+    translator.reset();
+    const spawnOpts = resumeId ? { prompt, ...options, resume: resumeId } : { prompt, ...options };
+    proc = spawnClaude(spawnOpts);
+    reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
+    drainStderr(proc);
   };
 
   const readUntilTurnComplete = async (signal?: AbortSignal): Promise<TRelayEvent[]> => {
@@ -110,98 +128,42 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     }
 
     const events: TRelayEvent[] = [];
-    const timeoutMs = TIMEOUTS.defaultAbortMs;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let gotTurnComplete = false;
 
-    const abortHandler = signal
-      ? () => {
-          proc?.kill();
-        }
-      : undefined;
+    for await (const event of readNdjsonEvents({
+      reader,
+      translator,
+      toolHandler,
+      proc,
+      signal,
+    })) {
+      if (event.type === "session_meta") {
+        currentSessionId = event.sessionId;
+      }
 
-    if (signal && abortHandler) {
-      if (signal.aborted) {
+      events.push(event);
+
+      if (event.type === "turn_complete") {
+        costTracker.update(
+          costOffsets.totalUsd + (event.costUsd ?? 0),
+          costOffsets.inputTokens + (event.inputTokens ?? 0),
+          costOffsets.outputTokens + (event.outputTokens ?? 0),
+        );
+        costTracker.checkBudget();
+        gotTurnComplete = true;
+        break;
+      }
+    }
+
+    if (!gotTurnComplete) {
+      if (signal?.aborted) {
         throw new AbortError();
       }
-      signal.addEventListener("abort", abortHandler, { once: true });
-    }
-
-    try {
-      while (true) {
-        if (signal?.aborted) {
-          throw new AbortError();
-        }
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new TimeoutError(`No data received within ${timeoutMs}ms`));
-          }, timeoutMs);
-        });
-        const readResult = await Promise.race([reader.read(), timeoutPromise]);
-        clearTimeout(timeoutId);
-        const { done, value } = readResult;
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-
-        if (buffer.length > LIMITS.ndjsonMaxLineChars) {
-          throw new ClaudeError(`NDJSON buffer exceeded ${LIMITS.ndjsonMaxLineChars} chars`);
-        }
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          const raw = parseLine(line);
-          if (!raw) {
-            continue;
-          }
-
-          const translated = translator.translate(raw);
-
-          for (const event of translated) {
-            if (event.type === "tool_use" && toolHandler && proc) {
-              await dispatchToolDecision(proc, toolHandler, event);
-            }
-
-            if (event.type === "session_meta") {
-              currentSessionId = event.sessionId;
-            }
-
-            events.push(event);
-
-            if (event.type === "turn_complete") {
-              costTracker.update(
-                costOffsets.totalUsd + (event.costUsd ?? 0),
-                costOffsets.inputTokens + (event.inputTokens ?? 0),
-                costOffsets.outputTokens + (event.outputTokens ?? 0),
-              );
-              costTracker.checkBudget();
-              return events;
-            }
-          }
-        }
-      }
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      if (signal && abortHandler) {
-        signal.removeEventListener("abort", abortHandler);
-      }
-    }
-
-    if (!events.some((e) => e.type === "turn_complete")) {
-      throw new ProcessError("Process exited without completing the turn");
+      const stderrMsg = getStderrText();
+      throw new ProcessError(stderrMsg || "Process exited without completing the turn");
     }
 
     return events;
-  };
-
-  const buildTurnResult = (events: TRelayEvent[]): TAskResult => {
-    return buildResult(events, costTracker, currentSessionId);
   };
 
   const doAsk = async (prompt: string): Promise<TAskResult> => {
@@ -222,11 +184,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       events = await readUntilTurnComplete(options.signal);
     } catch (error) {
       if (error instanceof AbortError || error instanceof TimeoutError) {
-        if (proc) {
-          proc.kill();
-        }
-        proc = undefined;
-        cleanupProcess();
+        killProc();
         throw error;
       }
       if (isTransientError(error) && consecutiveCrashes < LIMITS.maxRespawnAttempts) {
@@ -235,20 +193,12 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
         try {
           events = await readUntilTurnComplete(options.signal);
         } catch (retryError) {
-          if (proc) {
-            proc.kill();
-          }
-          proc = undefined;
-          cleanupProcess();
+          killProc();
           translator.reset();
           throw retryError;
         }
       } else {
-        if (proc) {
-          proc.kill();
-        }
-        proc = undefined;
-        cleanupProcess();
+        killProc();
         translator.reset();
         throw error;
       }
@@ -267,7 +217,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       consecutiveCrashes = 0;
     }
 
-    return buildTurnResult(events);
+    return buildResult(events, costTracker, currentSessionId);
   };
 
   let closed = false;
@@ -279,7 +229,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     const prev = inFlight ?? Promise.resolve();
     const run = prev
       .catch((prevError: unknown) => {
-        if (prevError instanceof KnownError) {
+        if (prevError instanceof KnownError || prevError instanceof BudgetExceededError) {
           throw prevError;
         }
       })

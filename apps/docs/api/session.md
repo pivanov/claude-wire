@@ -86,4 +86,4 @@ const session = claude.session({ signal: AbortSignal.timeout(60_000) });
 
 ## Timeouts
 
-Each turn has a 5-minute timeout (`TIMEOUTS.defaultAbortMs`). If no `turn_complete` is received within this window, a `TimeoutError` is thrown.
+Each read operation has a 5-minute inactivity timeout (`TIMEOUTS.defaultAbortMs`). If no data is received within this window, a `TimeoutError` is thrown. The timeout resets on every chunk, so a turn that keeps streaming data can run indefinitely.

@@ -21,6 +21,8 @@ export type { ITranslator } from "./parser/translator.js";
 export { createTranslator } from "./parser/translator.js";
 export type { IClaudeProcess, ISpawnOptions } from "./process.js";
 export { buildArgs, resetBinaryCache, spawnClaude } from "./process.js";
+export type { IReaderOptions } from "./reader.js";
+export { readNdjsonEvents } from "./reader.js";
 export type { IClaudeSession } from "./session.js";
 export { createSession } from "./session.js";
 export type { IClaudeStream } from "./stream.js";

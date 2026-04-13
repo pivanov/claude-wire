@@ -90,8 +90,8 @@ describe("createStream", () => {
       // drain
     }
 
-    // Now text() should throw
-    expect(() => stream.text()).toThrow("Cannot call text()/cost()/result() after iterating with for-await");
+    // Now text() should throw (synchronously in ensureConsumed)
+    await expect(stream.text()).rejects.toThrow("Cannot call text()/cost()/result() after iterating with for-await");
   });
 
   test("throws when text() then for-await are mixed", async () => {

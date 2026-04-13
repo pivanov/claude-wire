@@ -260,6 +260,8 @@ describe("createTranslator", () => {
     test("session_meta has correct data", () => {
       const events = translateFixture("single-turn.ndjson");
       const meta = events.find((e) => e.type === "session_meta");
+      expect(meta).toBeDefined();
+      expect(meta?.type).toBe("session_meta");
       if (meta?.type === "session_meta") {
         expect(meta.sessionId).toBe("sess-1");
         expect(meta.model).toBe("claude-sonnet-4-6");
@@ -270,6 +272,8 @@ describe("createTranslator", () => {
     test("turn_complete has cost data", () => {
       const events = translateFixture("single-turn.ndjson");
       const tc = events.find((e) => e.type === "turn_complete");
+      expect(tc).toBeDefined();
+      expect(tc?.type).toBe("turn_complete");
       if (tc?.type === "turn_complete") {
         expect(tc.costUsd).toBe(0.018);
         expect(tc.durationMs).toBe(8500);

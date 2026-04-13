@@ -18,8 +18,11 @@ export const dispatchToolDecision = async (proc: IClaudeProcess, toolHandler: IT
       proc.write(writer.approve(event.toolUseId));
     } else if (decision === "deny") {
       proc.write(writer.deny(event.toolUseId));
-    } else {
+    } else if (typeof decision === "object" && decision !== null && typeof decision.result === "string") {
       proc.write(writer.toolResult(event.toolUseId, decision.result));
+    } else {
+      console.warn("[claude-wire] Invalid tool decision, defaulting to deny");
+      proc.write(writer.deny(event.toolUseId));
     }
   } catch {
     // stdin closed - process died, error will surface through read path

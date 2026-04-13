@@ -1,4 +1,4 @@
-import { execSync, spawn as nodeSpawn } from "node:child_process";
+import { execFileSync, spawn as nodeSpawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { Readable } from "node:stream";
 
@@ -40,7 +40,7 @@ export const whichSync = (name: string): string | undefined => {
   }
 
   try {
-    return execSync(`which ${name}`, { encoding: "utf-8" }).trim() || undefined;
+    return execFileSync("which", [name], { encoding: "utf-8" }).trim() || undefined;
   } catch {
     return undefined;
   }
@@ -49,8 +49,8 @@ export const whichSync = (name: string): string | undefined => {
 export const fileExists = (path: string): boolean => {
   if (isBun) {
     try {
-      const stat = Bun.file(path);
-      return stat.size > 0;
+      accessSync(path, constants.X_OK);
+      return statSync(path).size > 0;
     } catch {
       return false;
     }
@@ -95,14 +95,23 @@ const spawnBun = (args: string[], opts: ISpawnOpts): IRawProcess => {
 const nodeReadableToWeb = (readable: Readable): ReadableStream<Uint8Array> => {
   return new ReadableStream({
     start(controller) {
+      let closed = false;
       readable.on("data", (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk));
+        if (!closed) {
+          controller.enqueue(new Uint8Array(chunk));
+        }
       });
       readable.on("end", () => {
-        controller.close();
+        if (!closed) {
+          closed = true;
+          controller.close();
+        }
       });
       readable.on("error", (err) => {
-        controller.error(err);
+        if (!closed) {
+          closed = true;
+          controller.error(err);
+        }
       });
     },
     cancel() {
