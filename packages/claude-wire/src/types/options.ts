@@ -38,6 +38,8 @@ export interface IClaudeOptions {
   forkSession?: boolean;
   noSessionPersistence?: boolean;
   sessionId?: string;
+  settingSources?: string;
+  disableSlashCommands?: boolean;
 }
 
 export interface ISessionOptions extends IClaudeOptions {}

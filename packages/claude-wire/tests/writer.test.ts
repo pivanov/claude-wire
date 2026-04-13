@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ClaudeError } from "@/errors.js";
 import { writer } from "@/writer.js";
 
 describe("writer", () => {
@@ -58,6 +59,29 @@ describe("writer", () => {
       expect(parsed.type).toBe("tool_result");
       expect(parsed.tool_use_id).toBe("toolu_789");
       expect(parsed.content).toBe("file contents here");
+    });
+
+    test("accepts empty content (valid for tools like Write)", () => {
+      const parsed = JSON.parse(writer.toolResult("toolu_789", ""));
+      expect(parsed.content).toBe("");
+    });
+  });
+
+  describe("input validation", () => {
+    test("user throws ClaudeError on empty content", () => {
+      expect(() => writer.user("")).toThrow(ClaudeError);
+    });
+
+    test("approve throws on empty toolUseId", () => {
+      expect(() => writer.approve("")).toThrow("toolUseId must be a non-empty string");
+    });
+
+    test("deny throws on empty toolUseId", () => {
+      expect(() => writer.deny("")).toThrow("toolUseId must be a non-empty string");
+    });
+
+    test("toolResult throws on empty toolUseId", () => {
+      expect(() => writer.toolResult("", "content")).toThrow("toolUseId must be a non-empty string");
     });
   });
 

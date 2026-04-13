@@ -69,12 +69,16 @@ When multiple options are set, they're evaluated in this order:
 
 ## Built-in Tools
 
-claude-wire exports the set of known built-in Claude Code tools:
+claude-wire exports a set of known built-in Claude Code tools:
 
 ```ts
-import { BUILT_IN_TOOLS, isBuiltInTool } from "claude-wire";
+import { BUILT_IN_TOOLS, isBuiltInTool } from "@pivanov/claude-wire";
 
 console.log(BUILT_IN_TOOLS); // Set { "Read", "Write", "Edit", "Bash", ... }
 console.log(isBuiltInTool("Read")); // true
 console.log(isBuiltInTool("my-mcp-tool")); // false
 ```
+
+::: warning
+`BUILT_IN_TOOLS` is a best-effort snapshot and may not include tools added in newer Claude Code versions. For the authoritative list, check the `tools` array in the `session_meta` event from a live session.
+:::

@@ -1,5 +1,5 @@
 import { input, select } from "@inquirer/prompts";
-import { claude } from "claude-wire";
+import { claude } from "@pivanov/claude-wire";
 import { answer, cyan, dim, divider, gap, info, label, prompt, stats, warn } from "./format.js";
 import { createSpinner } from "./spinner.js";
 

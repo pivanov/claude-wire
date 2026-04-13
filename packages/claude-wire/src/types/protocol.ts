@@ -1,8 +1,8 @@
 export type TModelUsageEntry = {
   inputTokens: number;
   outputTokens: number;
-  cacheReadInputTokens: number;
-  cacheCreationInputTokens: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
   contextWindow: number;
 };
 

@@ -4,5 +4,6 @@ node_modules/
 *.tsbuildinfo
 apps/docs/.vitepress/cache/
 apps/docs/.vitepress/dist/
+*.tgz
 CLAUDE.md
 .claude/

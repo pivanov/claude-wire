@@ -57,16 +57,26 @@ export const isKnownError = (error: unknown): error is KnownError => {
   return error instanceof KnownError;
 };
 
-const TRANSIENT_PATTERN = /fetch failed|ECONNREFUSED|ETIMEDOUT|ECONNRESET|EAI_AGAIN|network|EPIPE|SIGPIPE|broken pipe/i;
+const TRANSIENT_PATTERN = /fetch failed|ECONNREFUSED|ETIMEDOUT|ECONNRESET|EAI_AGAIN|network error|network timeout|EPIPE|SIGPIPE|broken pipe/i;
 
 export const isTransientError = (error: unknown): boolean => {
   if (error instanceof AbortError || error instanceof BudgetExceededError) {
     return false;
   }
   if (error instanceof ProcessError) {
-    const transientCodes = [137, 139, 143];
+    const transientCodes = [137, 143];
     return error.exitCode !== undefined && transientCodes.includes(error.exitCode);
   }
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(error);
   return TRANSIENT_PATTERN.test(message);
+};
+
+export const errorMessage = (error: unknown): string => {
+  return error instanceof Error ? error.message : String(error);
+};
+
+export const assertPositiveNumber = (value: number | undefined, name: string): void => {
+  if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
+    throw new ClaudeError(`${name} must be a finite positive number`);
+  }
 };

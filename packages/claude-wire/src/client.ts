@@ -15,8 +15,8 @@ export interface IClaudeClient {
 const mergeOptions = (defaults: IClaudeOptions, overrides?: IClaudeOptions): IClaudeOptions => ({
   ...defaults,
   ...overrides,
-  tools: overrides?.tools || defaults.tools ? { ...defaults.tools, ...overrides?.tools } : undefined,
-  env: overrides?.env || defaults.env ? { ...defaults.env, ...overrides?.env } : undefined,
+  tools: overrides && "tools" in overrides ? (overrides.tools ? { ...defaults.tools, ...overrides.tools } : overrides.tools) : defaults.tools,
+  env: overrides && "env" in overrides ? (overrides.env ? { ...defaults.env, ...overrides.env } : overrides.env) : defaults.env,
 });
 
 export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
@@ -32,7 +32,7 @@ export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
   };
 
   const session = (options?: ISessionOptions): IClaudeSession => {
-    const merged = mergeOptions(defaults, options) as ISessionOptions;
+    const merged = mergeOptions(defaults, options);
     return createSession(merged);
   };
 

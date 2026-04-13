@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BINARY } from "./constants.js";
-import { KnownError, ProcessError } from "./errors.js";
+import { assertPositiveNumber, errorMessage, KnownError, ProcessError } from "./errors.js";
+import { fileExists, spawnProcess, whichSync } from "./runtime.js";
 import type { IClaudeOptions } from "./types/options.js";
 import { writer } from "./writer.js";
 
@@ -20,31 +21,21 @@ export interface ISpawnOptions extends IClaudeOptions {
 }
 
 const resolveBinaryPath = (): string => {
-  try {
-    const result = Bun.spawnSync(["which", "claude"], { stdout: "pipe", stderr: "pipe" });
-    const path = new TextDecoder().decode(result.stdout).trim();
-    if (path) {
-      return path;
-    }
-  } catch {
-    // fall through
+  const found = whichSync("claude");
+  if (found) {
+    return found;
   }
 
   for (const p of BINARY.commonPaths) {
-    try {
-      const stat = Bun.file(p);
-      if (stat.size > 0) {
-        return p;
-      }
-    } catch {
-      // continue
+    if (fileExists(p)) {
+      return p;
     }
   }
 
   return BINARY.name;
 };
 
-const ALIAS_PATTERN = /alias\s+claude\s*=\s*.*CLAUDE_CONFIG_DIR=\$?(?:HOME|\{HOME\}|~)\/(\S+?)(?:\s|\/|$)/;
+const ALIAS_PATTERN = /(?:alias\s+claude\s*=|export\s+).*CLAUDE_CONFIG_DIR=["']?\$?(?:HOME|\{HOME\}|~)\/?([^\s"']+?)["']?(?:\s|\/|$)/;
 
 const resolveConfigDirFromAlias = (): string | undefined => {
   const home = homedir();
@@ -86,16 +77,8 @@ const resolve = (): TResolvedEnv => {
   return cached;
 };
 
-export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
-  if (options.maxBudgetUsd !== undefined && (Number.isNaN(options.maxBudgetUsd) || options.maxBudgetUsd <= 0)) {
-    throw new ProcessError("maxBudgetUsd must be a positive number");
-  }
-  if (options.maxCostUsd !== undefined && (Number.isNaN(options.maxCostUsd) || options.maxCostUsd <= 0)) {
-    throw new ProcessError("maxCostUsd must be a positive number");
-  }
-
-  const resolved = resolve();
-  const args: string[] = [resolved.binaryPath, "-p", "--output-format", "stream-json", "--input-format", "stream-json"];
+export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] => {
+  const args: string[] = [binaryPath, "-p", "--output-format", "stream-json", "--input-format", "stream-json"];
 
   if (options.verbose !== false) {
     args.push("--verbose");
@@ -113,8 +96,12 @@ export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
     args.push("--append-system-prompt", options.appendSystemPrompt);
   }
 
-  if (options.allowedTools && options.allowedTools.length > 0) {
-    args.push("--allowedTools", options.allowedTools.join(","));
+  if (options.allowedTools) {
+    if (options.allowedTools.length === 0) {
+      args.push("--tools", "");
+    } else {
+      args.push("--allowedTools", options.allowedTools.join(","));
+    }
   }
 
   if (options.disallowedTools && options.disallowedTools.length > 0) {
@@ -179,28 +166,40 @@ export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
     args.push("--session-id", options.sessionId);
   }
 
+  if (options.settingSources !== undefined) {
+    args.push("--setting-sources", options.settingSources);
+  }
+
+  if (options.disableSlashCommands) {
+    args.push("--disable-slash-commands");
+  }
+
+  return args;
+};
+
+export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
+  assertPositiveNumber(options.maxBudgetUsd, "maxBudgetUsd");
+  const resolved = resolve();
+  const args = buildArgs(options, resolved.binaryPath);
+
   try {
-    const spawnEnv: Record<string, string | undefined> = { ...process.env };
+    const needsEnv = resolved.aliasConfigDir || options.configDir || options.env;
+    let spawnEnv: Record<string, string | undefined> | undefined;
 
-    if (resolved.aliasConfigDir) {
-      spawnEnv.CLAUDE_CONFIG_DIR = resolved.aliasConfigDir;
+    if (needsEnv) {
+      spawnEnv = { ...process.env };
+      if (options.env) {
+        Object.assign(spawnEnv, options.env);
+      }
+      if (resolved.aliasConfigDir) {
+        spawnEnv.CLAUDE_CONFIG_DIR = resolved.aliasConfigDir;
+      }
+      if (options.configDir) {
+        spawnEnv.CLAUDE_CONFIG_DIR = options.configDir;
+      }
     }
 
-    if (options.configDir) {
-      spawnEnv.CLAUDE_CONFIG_DIR = options.configDir;
-    }
-
-    if (options.env) {
-      Object.assign(spawnEnv, options.env);
-    }
-
-    const proc = Bun.spawn(args, {
-      cwd: options.cwd,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-      env: spawnEnv,
-    });
+    const proc = spawnProcess(args, { cwd: options.cwd, env: spawnEnv });
 
     if (options.prompt) {
       proc.stdin.write(writer.user(options.prompt));
@@ -214,12 +213,12 @@ export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
         proc.kill();
       },
       exited: proc.exited,
-      stdout: proc.stdout as ReadableStream<Uint8Array>,
-      stderr: proc.stderr as ReadableStream<Uint8Array>,
+      stdout: proc.stdout,
+      stderr: proc.stderr,
       pid: proc.pid,
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = errorMessage(error);
     if (msg.includes("ENOENT") || msg.includes("not found")) {
       throw new KnownError("binary-not-found", "Claude CLI not found. Install it from https://claude.ai/download");
     }

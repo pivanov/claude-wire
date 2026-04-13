@@ -1,7 +1,7 @@
 import type { ICostTracker } from "./cost.js";
 import type { IClaudeProcess } from "./process.js";
 import type { IToolHandlerInstance } from "./tools/handler.js";
-import type { TRelayEvent, TTextEvent, TToolUseEvent } from "./types/events.js";
+import type { TRelayEvent, TTextEvent, TToolUseEvent, TTurnCompleteEvent } from "./types/events.js";
 import type { TAskResult } from "./types/results.js";
 import { writer } from "./writer.js";
 
@@ -9,28 +9,39 @@ export const dispatchToolDecision = async (proc: IClaudeProcess, toolHandler: IT
   let decision: "approve" | "deny" | { result: string };
   try {
     decision = await toolHandler.decide(event);
-  } catch {
+  } catch (error) {
+    console.warn(`[claude-wire] Tool handler threw, defaulting to deny: ${error instanceof Error ? error.message : String(error)}`);
     decision = "deny";
   }
-  if (decision === "approve") {
-    proc.write(writer.approve(event.toolUseId));
-  } else if (decision === "deny") {
-    proc.write(writer.deny(event.toolUseId));
-  } else {
-    proc.write(writer.toolResult(event.toolUseId, decision.result));
+  try {
+    if (decision === "approve") {
+      proc.write(writer.approve(event.toolUseId));
+    } else if (decision === "deny") {
+      proc.write(writer.deny(event.toolUseId));
+    } else {
+      proc.write(writer.toolResult(event.toolUseId, decision.result));
+    }
+  } catch {
+    // stdin closed - process died, error will surface through read path
   }
 };
 
+export const extractText = (events: TRelayEvent[]): string => {
+  return events
+    .filter((e): e is TTextEvent => e.type === "text")
+    .map((e) => e.content)
+    .join("");
+};
+
 export const buildResult = (events: TRelayEvent[], costTracker: ICostTracker, sessionId: string | undefined): TAskResult => {
-  const textParts = events.filter((e): e is TTextEvent => e.type === "text").map((e) => e.content);
-  const tc = events.findLast((e) => e.type === "turn_complete");
+  const tc = events.findLast((e): e is TTurnCompleteEvent => e.type === "turn_complete");
   const snap = costTracker.snapshot();
 
   return {
-    text: textParts.join(""),
+    text: extractText(events),
     costUsd: snap.totalUsd,
     tokens: { input: snap.inputTokens, output: snap.outputTokens },
-    duration: tc?.type === "turn_complete" ? (tc.durationMs ?? 0) : 0,
+    duration: tc?.durationMs ?? 0,
     sessionId,
     events,
   };

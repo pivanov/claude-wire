@@ -1,4 +1,4 @@
-import { BudgetExceededError } from "./errors.js";
+import { assertPositiveNumber, BudgetExceededError } from "./errors.js";
 import type { TCostSnapshot } from "./types/results.js";
 
 export interface ICostTracker {
@@ -16,6 +16,8 @@ export interface ICostTrackerOptions {
 }
 
 export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTracker => {
+  assertPositiveNumber(options.maxCostUsd, "maxCostUsd");
+
   let totalUsd = 0;
   let inputTokens = 0;
   let outputTokens = 0;
@@ -32,7 +34,11 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
     outputTokens = totalOutputToks;
 
     if (options.onCostUpdate) {
-      options.onCostUpdate(snapshot());
+      try {
+        options.onCostUpdate(snapshot());
+      } catch {
+        // user callback error - don't crash the stream/session
+      }
     }
   };
 

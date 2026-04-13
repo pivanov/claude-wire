@@ -78,7 +78,7 @@ All methods accept these options:
 | `model` | `"opus" \| "sonnet" \| "haiku" \| string` | Model to use |
 | `systemPrompt` | `string` | Override system prompt |
 | `appendSystemPrompt` | `string` | Append to default system prompt |
-| `allowedTools` | `string[]` | Tools to allow (CLI-level) |
+| `allowedTools` | `string[]` | Tools to allow (CLI-level). Pass `[]` to disable all tools including MCP servers. |
 | `tools` | `IToolHandler` | Runtime tool control (approve/deny/intercept) |
 | `maxCostUsd` | `number` | SDK-side budget limit. Checked after each turn, throws `BudgetExceededError` and kills the process |
 | `maxBudgetUsd` | `number` | Claude Code native budget via `--max-budget-usd`. Enforced by the CLI itself |
@@ -101,6 +101,20 @@ All methods accept these options:
 | `permissionMode` | `string` | Permission mode: `"default"`, `"plan"`, `"auto"`, `"bypassPermissions"`, `"acceptEdits"`, `"dontAsk"` |
 | `configDir` | `string` | Override `CLAUDE_CONFIG_DIR` for the spawned process |
 | `env` | `Record<string, string>` | Custom environment variables for the spawned process |
+| `settingSources` | `string` | Pass `""` to skip loading CLAUDE.md, settings.json, and project instructions |
+| `disableSlashCommands` | `boolean` | Disable slash command loading for faster startup |
+
+::: tip Lightweight / Headless Mode
+For fast startup (~1.5s instead of ~35s), disable tools, settings, and slash commands:
+```ts
+claude.ask("Classify this text", {
+  model: "haiku",
+  allowedTools: [],
+  settingSources: "",
+  disableSlashCommands: true,
+});
+```
+:::
 
 ::: info Dual Budget System
 `maxCostUsd` is SDK-level budget enforcement (throws `BudgetExceededError`). `maxBudgetUsd` is CLI-level enforcement (passed as `--max-budget-usd` flag). They operate independently.

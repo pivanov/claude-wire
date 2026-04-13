@@ -1,4 +1,4 @@
-import { claude } from "claude-wire";
+import { claude } from "@pivanov/claude-wire";
 import { answer, divider, gap, info, label, prompt, stats } from "./format.js";
 import { createSpinner } from "./spinner.js";
 

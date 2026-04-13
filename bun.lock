@@ -21,11 +21,11 @@
       "version": "0.0.1",
       "dependencies": {
         "@inquirer/prompts": "^7.0.0",
-        "claude-wire": "workspace:*",
+        "@pivanov/claude-wire": "workspace:*",
       },
     },
     "packages/claude-wire": {
-      "name": "claude-wire",
+      "name": "@pivanov/claude-wire",
       "version": "0.0.1",
       "devDependencies": {
         "@types/bun": "^1.3.12",
@@ -327,6 +327,8 @@
 
     "@oxc-resolver/binding-win32-x64-msvc": ["@oxc-resolver/binding-win32-x64-msvc@11.19.1", "", { "os": "win32", "cpu": "x64" }, "sha512-6hIU3RQu45B+VNTY4Ru8ppFwjVS/S5qwYyGhBotmjxfEKk41I2DlGtRfGJndZ5+6lneE2pwloqunlOyZuX/XAw=="],
 
+    "@pivanov/claude-wire": ["@pivanov/claude-wire@workspace:packages/claude-wire"],
+
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.60.1", "", { "os": "android", "cpu": "arm" }, "sha512-d6FinEBLdIiK+1uACUttJKfgZREXrF0Qc2SmLII7W2AD8FfiZ9Wjd+rD/iRuf5s5dWrr1GgwXCvPqOuDquOowA=="],
 
     "@rollup/rollup-android-arm64": ["@rollup/rollup-android-arm64@4.60.1", "", { "os": "android", "cpu": "arm64" }, "sha512-YjG/EwIDvvYI1YvYbHvDz/BYHtkY4ygUIXHnTdLhG+hKIQFBiosfWiACWortsKPKU/+dUwQQCKQM3qrDe8c9BA=="],
@@ -478,8 +480,6 @@
     "character-entities-legacy": ["character-entities-legacy@3.0.0", "", {}, "sha512-RpPp0asT/6ufRm//AJVwpViZbGM/MkjQFxJccQRHmISF/22NBtsHqAWmL+/pmkPWoIUJdWyeVleTl1wydHATVQ=="],
 
     "chardet": ["chardet@2.1.1", "", {}, "sha512-PsezH1rqdV9VvyNhxxOW32/d75r01NY7TQCmOqomRo15ZSOKbpTFVsfjghxo6JloQUCGnH4k1LGu0R4yCLlWQQ=="],
-
-    "claude-wire": ["claude-wire@workspace:packages/claude-wire"],
 
     "claude-wire-docs": ["claude-wire-docs@workspace:apps/docs"],
 

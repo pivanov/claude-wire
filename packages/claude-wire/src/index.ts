@@ -3,13 +3,24 @@ export { createClient } from "./client.js";
 export { BINARY, LIMITS, TIMEOUTS } from "./constants.js";
 export type { ICostTracker, ICostTrackerOptions } from "./cost.js";
 export { createCostTracker } from "./cost.js";
-export { AbortError, BudgetExceededError, ClaudeError, isKnownError, isTransientError, KnownError, ProcessError, TimeoutError } from "./errors.js";
+export {
+  AbortError,
+  assertPositiveNumber,
+  BudgetExceededError,
+  ClaudeError,
+  errorMessage,
+  isKnownError,
+  isTransientError,
+  KnownError,
+  ProcessError,
+  TimeoutError,
+} from "./errors.js";
 export { blockFingerprint, extractContent, parseDoubleEncoded } from "./parser/content.js";
 export { parseLine } from "./parser/ndjson.js";
 export type { ITranslator } from "./parser/translator.js";
 export { createTranslator } from "./parser/translator.js";
 export type { IClaudeProcess, ISpawnOptions } from "./process.js";
-export { resetBinaryCache, spawnClaude } from "./process.js";
+export { buildArgs, resetBinaryCache, spawnClaude } from "./process.js";
 export type { IClaudeSession } from "./session.js";
 export { createSession } from "./session.js";
 export type { IClaudeStream } from "./stream.js";

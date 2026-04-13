@@ -5,7 +5,7 @@ A session keeps a single Claude Code process alive across multiple `ask()` calls
 ## Creating a Session
 
 ```ts
-import { claude } from "claude-wire";
+import { claude } from "@pivanov/claude-wire";
 
 const session = claude.session({
   cwd: "/my/project",

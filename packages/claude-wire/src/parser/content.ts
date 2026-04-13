@@ -37,6 +37,10 @@ export const parseDoubleEncoded = (value: unknown): string => {
     return String(value ?? "");
   }
 
+  if (!value.startsWith('"')) {
+    return value;
+  }
+
   try {
     const parsed: unknown = JSON.parse(value);
     if (typeof parsed === "string") {

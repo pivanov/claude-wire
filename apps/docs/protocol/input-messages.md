@@ -19,7 +19,7 @@ Send a follow-up prompt in a multi-turn session.
 ```
 
 ```ts
-import { writer } from "claude-wire";
+import { writer } from "@pivanov/claude-wire";
 process.stdout.write(writer.user("What was my previous question?"));
 ```
 

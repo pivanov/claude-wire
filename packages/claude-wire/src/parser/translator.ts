@@ -1,6 +1,35 @@
-import type { TRelayEvent } from "../types/events.js";
-import type { TClaudeContent, TClaudeEvent } from "../types/protocol.js";
+import type { TRelayEvent, TTurnCompleteEvent } from "../types/events.js";
+import type { TClaudeContent, TClaudeEvent, TModelUsageEntry } from "../types/protocol.js";
 import { blockFingerprint, extractContent, parseDoubleEncoded } from "./content.js";
+
+const extractTokens = (modelUsage?: Record<string, TModelUsageEntry>) => {
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+  let contextWindow: number | undefined;
+
+  if (modelUsage) {
+    for (const entry of Object.values(modelUsage)) {
+      inputTokens = (inputTokens ?? 0) + entry.inputTokens + (entry.cacheReadInputTokens ?? 0) + (entry.cacheCreationInputTokens ?? 0);
+      outputTokens = (outputTokens ?? 0) + entry.outputTokens;
+      contextWindow = entry.contextWindow;
+    }
+  }
+
+  return { inputTokens, outputTokens, contextWindow };
+};
+
+const buildTurnComplete = (raw: TClaudeEvent): TTurnCompleteEvent => {
+  const { inputTokens, outputTokens, contextWindow } = extractTokens(raw.modelUsage);
+  return {
+    type: "turn_complete",
+    sessionId: raw.session_id,
+    costUsd: raw.total_cost_usd,
+    inputTokens,
+    outputTokens,
+    contextWindow,
+    durationMs: raw.duration_ms,
+  };
+};
 
 export interface ITranslator {
   translate: (raw: TClaudeEvent) => TRelayEvent[];
@@ -24,9 +53,12 @@ const translateContentBlock = (block: TClaudeContent): TRelayEvent | undefined =
       return undefined;
     }
     case "tool_use": {
+      if (!block.id) {
+        return undefined;
+      }
       return {
         type: "tool_use",
-        toolUseId: block.id ?? "",
+        toolUseId: block.id,
         toolName: block.name ?? "",
         input: typeof block.input === "string" ? block.input : JSON.stringify(block.input ?? {}),
       };
@@ -48,6 +80,11 @@ export const createTranslator = (): ITranslator => {
   let lastContentIndex = 0;
   let lastFirstBlockKey: string | undefined;
 
+  const reset = () => {
+    lastContentIndex = 0;
+    lastFirstBlockKey = undefined;
+  };
+
   const translate = (raw: TClaudeEvent): TRelayEvent[] => {
     const events: TRelayEvent[] = [];
 
@@ -61,61 +98,14 @@ export const createTranslator = (): ITranslator => {
       return events;
     }
 
-    if (raw.type === "system" && raw.subtype === "result") {
-      const text = parseDoubleEncoded(raw.result);
-
+    if (raw.type === "result" || (raw.type === "system" && raw.subtype === "result")) {
       if (raw.is_error) {
+        const text = parseDoubleEncoded(raw.result);
         events.push({ type: "error", message: text, sessionId: raw.session_id });
       }
 
-      events.push({
-        type: "turn_complete",
-        sessionId: raw.session_id,
-        costUsd: raw.total_cost_usd,
-        durationMs: raw.duration_ms,
-      });
-
-      lastContentIndex = 0;
-      lastFirstBlockKey = undefined;
-      return events;
-    }
-
-    if (raw.type === "result") {
-      const text = parseDoubleEncoded(raw.result);
-
-      const modelUsage = raw.modelUsage;
-      let inputTokens: number | undefined;
-      let outputTokens: number | undefined;
-      let contextWindow: number | undefined;
-
-      if (modelUsage) {
-        for (const entry of Object.values(modelUsage)) {
-          inputTokens = (inputTokens ?? 0) + entry.inputTokens + entry.cacheReadInputTokens + entry.cacheCreationInputTokens;
-          outputTokens = (outputTokens ?? 0) + entry.outputTokens;
-          contextWindow = entry.contextWindow;
-        }
-      }
-
-      if (raw.is_error) {
-        events.push({
-          type: "error",
-          message: text,
-          sessionId: raw.session_id,
-        });
-      }
-
-      events.push({
-        type: "turn_complete",
-        sessionId: raw.session_id,
-        costUsd: raw.total_cost_usd,
-        inputTokens,
-        outputTokens,
-        contextWindow,
-        durationMs: raw.duration_ms,
-      });
-
-      lastContentIndex = 0;
-      lastFirstBlockKey = undefined;
+      events.push(buildTurnComplete(raw));
+      reset();
       return events;
     }
 
@@ -157,11 +147,6 @@ export const createTranslator = (): ITranslator => {
     }
 
     return events;
-  };
-
-  const reset = () => {
-    lastContentIndex = 0;
-    lastFirstBlockKey = undefined;
   };
 
   return { translate, reset };

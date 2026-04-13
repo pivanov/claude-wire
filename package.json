@@ -2,9 +2,9 @@
   "private": true,
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "build": "bun run --filter claude-wire build",
-    "test": "bun run --filter claude-wire test",
-    "typecheck": "bun run --filter claude-wire typecheck",
+    "build": "bun run --filter '@pivanov/claude-wire' build",
+    "test": "bun run --filter '@pivanov/claude-wire' test",
+    "typecheck": "bun run --filter '@pivanov/claude-wire' typecheck",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "docs:dev": "bun run --filter claude-wire-docs dev",
@@ -12,7 +12,8 @@
     "examples": "bun --silent run apps/examples/cli.ts",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "bun run build && changeset publish"
+    "release": "bun run build && changeset publish",
+    "publish": "cd packages/claude-wire && npm publish --access public"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.11",

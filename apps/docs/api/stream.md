@@ -76,12 +76,12 @@ for await (const event of stream) { /* ... */ }
 await stream.text(); // Error: Cannot call after iterating
 ```
 
-Calling `[Symbol.asyncIterator]()` twice also throws:
+Iterating a second time yields nothing (the generator is already exhausted):
 
 ```ts
 const stream = claude.stream("Hello");
-for await (const event of stream) { /* ... */ }
-for await (const event of stream) { /* throws */ }
+for await (const event of stream) { /* gets events */ }
+for await (const event of stream) { /* silently yields nothing */ }
 ```
 
 ## Timeouts
@@ -90,7 +90,7 @@ Streams have a 5-minute timeout per read operation. If Claude doesn't respond wi
 
 ## Buffer Limits
 
-The NDJSON buffer is capped at 10MB (`LIMITS.ndjsonMaxLineBytes`). If a single line exceeds this, a `ClaudeError` is thrown.
+The NDJSON buffer is capped at 10MB (`LIMITS.ndjsonMaxLineChars`). If the buffer exceeds this, a `ClaudeError` is thrown.
 
 ## Process Cleanup
 

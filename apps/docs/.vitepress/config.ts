@@ -19,7 +19,7 @@ export default defineConfig({
       { text: "Guide", link: "/getting-started" },
       { text: "API", link: "/api/client" },
       { text: "Protocol", link: "/protocol/overview" },
-      { text: "npm", link: "https://www.npmjs.com/package/claude-wire" },
+      { text: "npm", link: "https://www.npmjs.com/package/@pivanov/claude-wire" },
     ],
 
     sidebar: [

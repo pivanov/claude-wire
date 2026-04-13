@@ -1,4 +1,4 @@
-import { claude } from "claude-wire";
+import { claude } from "@pivanov/claude-wire";
 import { bold, cyan, dim, divider, gap, green, info, label, prompt, yellow } from "./format.js";
 
 export const meta = {
@@ -48,7 +48,7 @@ export const run = async () => {
       case "tool_result": {
         events.push("tool_result");
         const status = event.isError ? yellow("error") : green("ok");
-        console.log(dim(`  ${elapsed}  tool result (${status}${dim(")")} ${event.output.length} chars`));
+        console.log(dim(`  ${elapsed}  tool result (${status}) ${event.output.length} chars`));
         break;
       }
       case "turn_complete": {

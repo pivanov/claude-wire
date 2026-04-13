@@ -7,7 +7,7 @@ All errors extend `ClaudeError`, which extends the native `Error`. You can catch
 Base error class for all claude-wire errors.
 
 ```ts
-import { ClaudeError } from "claude-wire";
+import { ClaudeError } from "@pivanov/claude-wire";
 
 try {
   await claude.ask("...");
@@ -23,7 +23,7 @@ try {
 Thrown when `maxCostUsd` is set and the cumulative cost exceeds the budget. The process is automatically killed.
 
 ```ts
-import { BudgetExceededError } from "claude-wire";
+import { BudgetExceededError } from "@pivanov/claude-wire";
 
 try {
   await claude.ask("...", { maxCostUsd: 0.10 });
@@ -43,7 +43,7 @@ try {
 Thrown when the operation is cancelled via an `AbortSignal`.
 
 ```ts
-import { AbortError } from "claude-wire";
+import { AbortError } from "@pivanov/claude-wire";
 
 try {
   await claude.ask("...", { signal: AbortSignal.timeout(5000) });
@@ -63,7 +63,7 @@ Thrown when an operation times out. Distinct from `AbortError` for cases where t
 Thrown when the Claude Code process exits with a non-zero exit code or fails to spawn.
 
 ```ts
-import { ProcessError } from "claude-wire";
+import { ProcessError } from "@pivanov/claude-wire";
 
 try {
   await claude.ask("...");
@@ -82,7 +82,7 @@ try {
 For expected, user-facing errors with a machine-readable code. Extends `ClaudeError`.
 
 ```ts
-import { KnownError, isKnownError } from "claude-wire";
+import { KnownError, isKnownError } from "@pivanov/claude-wire";
 
 try {
   await claude.ask("...");
@@ -101,11 +101,11 @@ try {
 Detects transient errors that may succeed on retry (network issues, signal kills). Returns `false` for `AbortError` and `BudgetExceededError` (those are intentional, not transient).
 
 ```ts
-import { isTransientError } from "claude-wire";
+import { isTransientError } from "@pivanov/claude-wire";
 
 if (isTransientError(error)) {
   // safe to retry
 }
 ```
 
-Matches: `ECONNREFUSED`, `ETIMEDOUT`, `ECONNRESET`, `EPIPE`, broken pipe, `ProcessError` with exit codes 137/139/143.
+Matches: `fetch failed`, `ECONNREFUSED`, `ETIMEDOUT`, `ECONNRESET`, `EAI_AGAIN`, `network error`, `network timeout`, `EPIPE`, `SIGPIPE`, `broken pipe`, `ProcessError` with exit codes 137 (OOM kill) / 143 (SIGTERM).

@@ -1,6 +1,6 @@
 import { select } from "@inquirer/prompts";
+import { dim } from "./format.js";
 
-const dim = (s: string) => `\x1b[90m${s}\x1b[0m`;
 const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
 
 const preflight = () => {

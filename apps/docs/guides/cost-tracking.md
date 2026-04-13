@@ -46,7 +46,7 @@ In sessions, cost survives process respawns via an internal offset mechanism.
 ## Handling Budget Errors
 
 ```ts
-import { claude, BudgetExceededError } from "claude-wire";
+import { claude, BudgetExceededError } from "@pivanov/claude-wire";
 
 try {
   await claude.ask("...", { maxCostUsd: 0.10 });
@@ -72,7 +72,7 @@ They operate independently and can be used together for layered budget control.
 For custom cost tracking logic, use the tracker directly:
 
 ```ts
-import { createCostTracker } from "claude-wire";
+import { createCostTracker } from "@pivanov/claude-wire";
 
 const tracker = createCostTracker({
   maxCostUsd: 1.00,

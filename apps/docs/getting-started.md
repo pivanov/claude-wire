@@ -2,30 +2,30 @@
 
 ## Prerequisites
 
-- [Claude Code CLI](https://code.claude.com/docs) installed and authenticated
-- [Bun](https://bun.sh) >= 1.0
+- [Claude Code CLI](https://claude.ai/download) installed and authenticated
+- [Bun](https://bun.sh) >= 1.0 or Node.js >= 22
 
 ## Installation
 
 ::: code-group
 ```bash [bun]
-bun add claude-wire
+bun add @pivanov/claude-wire
 ```
 ```bash [npm]
-npm install claude-wire
+npm install @pivanov/claude-wire
 ```
 ```bash [yarn]
-yarn add claude-wire
+yarn add @pivanov/claude-wire
 ```
 ```bash [pnpm]
-pnpm add claude-wire
+pnpm add @pivanov/claude-wire
 ```
 :::
 
 ## Your First Request
 
 ```ts
-import { claude } from "claude-wire";
+import { claude } from "@pivanov/claude-wire";
 
 const result = await claude.ask("What is 2 + 2?", {
   model: "haiku",

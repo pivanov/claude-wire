@@ -1,4 +1,4 @@
-import { BudgetExceededError, claude } from "claude-wire";
+import { BudgetExceededError, claude } from "@pivanov/claude-wire";
 import { answer, cyan, divider, gap, green, info, label, prompt, stats, warn } from "./format.js";
 import { createSpinner } from "./spinner.js";
 

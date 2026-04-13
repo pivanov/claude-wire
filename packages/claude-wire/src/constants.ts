@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 
 export const TIMEOUTS = {
   defaultAbortMs: 300_000,
+  gracefulExitMs: 5_000,
 } as const;
 
 export const LIMITS = {

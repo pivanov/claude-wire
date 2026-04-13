@@ -51,7 +51,7 @@ Build a backend that uses claude-wire to handle requests, then serve results to 
 
 ```ts
 // Server-side: Bun/Node.js
-import { claude } from "claude-wire";
+import { claude } from "@pivanov/claude-wire";
 
 app.post("/api/ask", async (req, res) => {
   const stream = claude.stream(req.body.prompt, { model: "haiku" });
@@ -103,7 +103,7 @@ await db.insert("usage", {
 Parse saved NDJSON logs from Claude Code sessions. Extract tool calls, costs, and decisions for post-hoc analysis. This works without spawning any process.
 
 ```ts
-import { parseLine, createTranslator } from "claude-wire";
+import { parseLine, createTranslator } from "@pivanov/claude-wire";
 import { readFileSync } from "node:fs";
 
 const translator = createTranslator();

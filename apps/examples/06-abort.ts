@@ -1,4 +1,4 @@
-import { AbortError, claude } from "claude-wire";
+import { AbortError, claude } from "@pivanov/claude-wire";
 import { answer, divider, gap, info, label, prompt, stats, warn } from "./format.js";
 import { createSpinner } from "./spinner.js";
 

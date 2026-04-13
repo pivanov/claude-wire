@@ -1,6 +1,6 @@
 import { LIMITS, TIMEOUTS } from "./constants.js";
 import { createCostTracker } from "./cost.js";
-import { AbortError, ClaudeError, isTransientError, ProcessError, TimeoutError } from "./errors.js";
+import { AbortError, ClaudeError, isTransientError, KnownError, ProcessError, TimeoutError } from "./errors.js";
 import { parseLine } from "./parser/ndjson.js";
 import { createTranslator } from "./parser/translator.js";
 import { buildResult, dispatchToolDecision } from "./pipeline.js";
@@ -12,27 +12,39 @@ import type { ISessionOptions } from "./types/options.js";
 import type { TAskResult } from "./types/results.js";
 import { writer } from "./writer.js";
 
-export interface IClaudeSession {
+export interface IClaudeSession extends AsyncDisposable {
   ask: (prompt: string) => Promise<TAskResult>;
   close: () => Promise<void>;
   sessionId: string | undefined;
 }
 
+const gracefulKill = async (p: IClaudeProcess): Promise<void> => {
+  p.kill();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    p.exited,
+    new Promise<void>((r) => {
+      timer = setTimeout(r, TIMEOUTS.gracefulExitMs);
+    }),
+  ]);
+  if (timer) {
+    clearTimeout(timer);
+  }
+};
+
 export const createSession = (options: ISessionOptions = {}): IClaudeSession => {
   let proc: IClaudeProcess | undefined;
   let currentSessionId: string | undefined;
-  let respawnCount = 0;
+  let consecutiveCrashes = 0;
   let turnCount = 0;
-  let costOffset = 0;
-  let tokenInputOffset = 0;
-  let tokenOutputOffset = 0;
+  let costOffsets = { totalUsd: 0, inputTokens: 0, outputTokens: 0 };
   const translator = createTranslator();
   const costTracker = createCostTracker({
     maxCostUsd: options.maxCostUsd,
     onCostUpdate: options.onCostUpdate,
   });
   const toolHandler = options.tools ? createToolHandler(options.tools) : undefined;
-  let askInProgress = false;
+  let inFlight: Promise<TAskResult> | undefined;
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let buffer = "";
@@ -51,22 +63,45 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     decoder = new TextDecoder();
   };
 
-  const spawnFresh = (prompt?: string) => {
-    if (respawnCount >= LIMITS.maxRespawnAttempts) {
-      throw new ProcessError(`Process crashed ${respawnCount} times, giving up`);
+  const spawnFresh = (prompt?: string, resumeId?: string) => {
+    if (consecutiveCrashes >= LIMITS.maxRespawnAttempts) {
+      if (proc) {
+        proc.kill();
+        proc.exited.catch(() => {});
+      }
+      cleanupProcess();
+      throw new ProcessError(`Process crashed ${consecutiveCrashes} times, giving up`);
     }
-    const snap = costTracker.snapshot();
-    costOffset = snap.totalUsd;
-    tokenInputOffset = snap.inputTokens;
-    tokenOutputOffset = snap.outputTokens;
+    costOffsets = costTracker.snapshot();
     if (proc) {
       proc.kill();
+      proc.exited.catch(() => {});
     }
     cleanupProcess();
     translator.reset();
-    proc = spawnClaude({ prompt, ...options });
+    const spawnOpts = resumeId ? { prompt, ...options, resume: resumeId } : { prompt, ...options };
+    proc = spawnClaude(spawnOpts);
     reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
-    respawnCount++;
+    drainStderr(proc);
+  };
+
+  const drainStderr = (p: IClaudeProcess) => {
+    const stderrReader = p.stderr.getReader();
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done } = await stderrReader.read();
+          if (done) {
+            break;
+          }
+        }
+      } catch {
+        // process exited
+      } finally {
+        stderrReader.releaseLock();
+      }
+    };
+    pump().catch(() => {});
   };
 
   const readUntilTurnComplete = async (signal?: AbortSignal): Promise<TRelayEvent[]> => {
@@ -112,7 +147,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
         buffer += decoder.decode(value, { stream: true });
 
         if (buffer.length > LIMITS.ndjsonMaxLineChars) {
-          throw new ClaudeError(`NDJSON buffer exceeded ${LIMITS.ndjsonMaxLineChars} bytes`);
+          throw new ClaudeError(`NDJSON buffer exceeded ${LIMITS.ndjsonMaxLineChars} chars`);
         }
 
         const lines = buffer.split("\n");
@@ -135,18 +170,15 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
               currentSessionId = event.sessionId;
             }
 
-            if (event.type === "turn_complete") {
-              costTracker.update(
-                costOffset + (event.costUsd ?? 0),
-                tokenInputOffset + (event.inputTokens ?? 0),
-                tokenOutputOffset + (event.outputTokens ?? 0),
-              );
-              costTracker.checkBudget();
-            }
-
             events.push(event);
 
             if (event.type === "turn_complete") {
+              costTracker.update(
+                costOffsets.totalUsd + (event.costUsd ?? 0),
+                costOffsets.inputTokens + (event.inputTokens ?? 0),
+                costOffsets.outputTokens + (event.outputTokens ?? 0),
+              );
+              costTracker.checkBudget();
               return events;
             }
           }
@@ -161,6 +193,10 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       }
     }
 
+    if (!events.some((e) => e.type === "turn_complete")) {
+      throw new ProcessError("Process exited without completing the turn");
+    }
+
     return events;
   };
 
@@ -168,67 +204,95 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     return buildResult(events, costTracker, currentSessionId);
   };
 
-  const ask = async (prompt: string): Promise<TAskResult> => {
-    if (askInProgress) {
-      throw new ClaudeError("Session is busy; await the previous ask() before calling again");
-    }
-    askInProgress = true;
-
-    try {
-      if (!proc) {
-        spawnFresh(prompt);
-      } else {
-        try {
-          proc.write(writer.user(prompt));
-        } catch {
-          translator.reset();
-          spawnFresh(prompt);
-        }
-      }
-
-      let events: TRelayEvent[];
+  const doAsk = async (prompt: string): Promise<TAskResult> => {
+    if (!proc) {
+      spawnFresh(prompt, currentSessionId);
+    } else {
       try {
-        events = await readUntilTurnComplete(options.signal);
-      } catch (error) {
-        if (error instanceof AbortError || error instanceof TimeoutError) {
+        proc.write(writer.user(prompt));
+      } catch {
+        consecutiveCrashes++;
+        translator.reset();
+        spawnFresh(prompt, currentSessionId);
+      }
+    }
+
+    let events: TRelayEvent[];
+    try {
+      events = await readUntilTurnComplete(options.signal);
+    } catch (error) {
+      if (error instanceof AbortError || error instanceof TimeoutError) {
+        if (proc) {
+          proc.kill();
+        }
+        proc = undefined;
+        cleanupProcess();
+        throw error;
+      }
+      if (isTransientError(error) && consecutiveCrashes < LIMITS.maxRespawnAttempts) {
+        consecutiveCrashes++;
+        spawnFresh(prompt, currentSessionId);
+        try {
+          events = await readUntilTurnComplete(options.signal);
+        } catch (retryError) {
           if (proc) {
             proc.kill();
           }
           proc = undefined;
           cleanupProcess();
-          throw error;
-        }
-        if (isTransientError(error) && respawnCount < LIMITS.maxRespawnAttempts) {
-          spawnFresh(prompt);
-          events = await readUntilTurnComplete(options.signal);
-        } else {
           translator.reset();
-          throw error;
+          throw retryError;
         }
-      }
-
-      respawnCount = 0;
-      turnCount++;
-
-      if (turnCount >= LIMITS.sessionMaxTurnsBeforeRecycle) {
+      } else {
         if (proc) {
           proc.kill();
-          await proc.exited;
         }
         proc = undefined;
         cleanupProcess();
-        turnCount = 0;
+        translator.reset();
+        throw error;
       }
-
-      return buildTurnResult(events);
-    } finally {
-      askInProgress = false;
     }
+
+    consecutiveCrashes = 0;
+    turnCount++;
+
+    if (turnCount >= LIMITS.sessionMaxTurnsBeforeRecycle) {
+      if (proc) {
+        await gracefulKill(proc);
+      }
+      proc = undefined;
+      cleanupProcess();
+      turnCount = 0;
+      consecutiveCrashes = 0;
+    }
+
+    return buildTurnResult(events);
+  };
+
+  let closed = false;
+
+  const ask = (prompt: string): Promise<TAskResult> => {
+    if (closed) {
+      return Promise.reject(new ClaudeError("Session is closed"));
+    }
+    const prev = inFlight ?? Promise.resolve();
+    const run = prev
+      .catch((prevError: unknown) => {
+        if (prevError instanceof KnownError) {
+          throw prevError;
+        }
+      })
+      .then(() => doAsk(prompt));
+    inFlight = run;
+    return run;
   };
 
   const close = async (): Promise<void> => {
-    if (askInProgress) {
-      throw new ClaudeError("Cannot close session while ask() is in progress");
+    closed = true;
+    if (inFlight) {
+      await inFlight.catch(() => {});
+      inFlight = undefined;
     }
     if (proc) {
       try {
@@ -236,8 +300,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       } catch {
         // stdin may already be closed
       }
-      proc.kill();
-      await proc.exited;
+      await gracefulKill(proc);
       proc = undefined;
     }
     cleanupProcess();
@@ -249,5 +312,6 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     get sessionId() {
       return currentSessionId;
     },
+    [Symbol.asyncDispose]: close,
   };
 };
