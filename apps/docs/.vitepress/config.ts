@@ -67,7 +67,7 @@ export default defineConfig({
 
     footer: {
       message: "Not affiliated with or endorsed by Anthropic.",
-      copyright: "MIT License",
+      copyright: "MIT License | Made by Pavel Ivanov",
     },
   },
 });
