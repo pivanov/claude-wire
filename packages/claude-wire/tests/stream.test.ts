@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { join } from "node:path";
-import { createMockProcess, loadFixtureLines, type TMockProcess } from "./helpers/mock-process.js";
+import { createMockProcess, createMultiTurnMockProcess, loadFixtureLines, type TMockProcess } from "./helpers/mock-process.js";
 
 const FIXTURE_DIR = join(import.meta.dir, "fixtures");
 const singleTurnLines = loadFixtureLines(join(FIXTURE_DIR, "single-turn.ndjson"));
@@ -226,6 +226,34 @@ describe("createStream", () => {
     const cost = await stream.cost();
 
     expect(result.costUsd).toBe(cost.totalUsd);
+  });
+
+  test("abort signal fired mid-loop throws AbortError", async () => {
+    const firstEvent = '{"type":"system","subtype":"init","session_id":"sess-abort","model":"claude-sonnet-4-6","tools":[]}';
+
+    const multiProc = createMultiTurnMockProcess();
+    multiProc.emitLines([firstEvent]);
+
+    mock.module("@/process.js", () => ({
+      spawnClaude: () => multiProc,
+    }));
+
+    const createStream = await loadCreateStream();
+    const controller = new AbortController();
+    const stream = createStream("fix the bug", { maxBudgetUsd: 1, signal: controller.signal });
+
+    const seen: string[] = [];
+    const iterate = (async () => {
+      for await (const event of stream) {
+        seen.push(event.type);
+        if (event.type === "session_meta") {
+          controller.abort();
+        }
+      }
+    })();
+
+    await expect(iterate).rejects.toThrow(/aborted/i);
+    expect(seen[0]).toBe("session_meta");
   });
 
   test("streams multi-agent fixture data correctly", async () => {

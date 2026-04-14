@@ -6,6 +6,7 @@ import { dispatchToolDecision } from "./pipeline.js";
 import type { IClaudeProcess } from "./process.js";
 import type { IToolHandlerInstance } from "./tools/handler.js";
 import type { TRelayEvent } from "./types/events.js";
+import { writer } from "./writer.js";
 
 export interface IReaderOptions {
   reader: ReadableStreamDefaultReader<Uint8Array>;
@@ -15,6 +16,38 @@ export interface IReaderOptions {
   signal?: AbortSignal;
 }
 
+export interface IStderrDrain {
+  chunks: string[];
+  done: Promise<void>;
+}
+
+export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): IStderrDrain => {
+  const chunks: string[] = [];
+  const stderrReader = proc.stderr.getReader();
+  const decoder = new TextDecoder();
+  const done = (async () => {
+    try {
+      while (true) {
+        const { done: isDone, value } = await stderrReader.read();
+        if (isDone) {
+          break;
+        }
+        chunks.push(decoder.decode(value, { stream: true }));
+      }
+    } catch {
+      // process exited
+    } finally {
+      // Flush any trailing partial multibyte sequence.
+      const tail = decoder.decode();
+      if (tail) {
+        chunks.push(tail);
+      }
+      stderrReader.releaseLock();
+    }
+  })().catch(() => {});
+  return { chunks, done };
+};
+
 export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TRelayEvent> {
   const { reader, translator, signal } = opts;
   const decoder = new TextDecoder();
@@ -22,11 +55,35 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let turnComplete = false;
 
+  let abortReject: ((err: Error) => void) | undefined;
+  const abortPromise = new Promise<never>((_, reject) => {
+    abortReject = reject;
+  });
+  // Swallow unhandled rejection if nothing ever races against this promise.
+  abortPromise.catch(() => {});
+
+  // Single resettable timeout shared across all iterations — avoids leaking
+  // a new Promise + setTimeout per read loop.
+  let timeoutReject: ((err: Error) => void) | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutReject = reject;
+  });
+  timeoutPromise.catch(() => {});
+  const resetReadTimeout = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = setTimeout(() => {
+      timeoutReject?.(new TimeoutError(`No data received within ${TIMEOUTS.defaultAbortMs}ms`));
+    }, TIMEOUTS.defaultAbortMs);
+  };
+
   const abortHandler = signal
     ? () => {
+        abortReject?.(new AbortError());
         if (opts.proc) {
           try {
-            opts.proc.write('{"type":"abort"}\n');
+            opts.proc.write(writer.abort());
           } catch {
             // stdin closed
           }
@@ -48,13 +105,8 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
         throw new AbortError();
       }
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(new TimeoutError(`No data received within ${TIMEOUTS.defaultAbortMs}ms`));
-        }, TIMEOUTS.defaultAbortMs);
-      });
-      const readResult = await Promise.race([reader.read(), timeoutPromise]);
-      clearTimeout(timeoutId);
+      resetReadTimeout();
+      const readResult = await Promise.race([reader.read(), timeoutPromise, abortPromise]);
 
       const { done, value } = readResult;
       if (done) {
@@ -116,5 +168,3 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
     }
   }
 }
-
-export type { TRelayEvent };

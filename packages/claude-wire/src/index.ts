@@ -1,8 +1,11 @@
+import { createClient } from "./client.js";
+
 export type { IClaudeClient } from "./client.js";
 export { createClient } from "./client.js";
 export { BINARY, LIMITS, TIMEOUTS } from "./constants.js";
 export type { ICostTracker, ICostTrackerOptions } from "./cost.js";
 export { createCostTracker } from "./cost.js";
+export type { TKnownErrorCode } from "./errors.js";
 export {
   AbortError,
   assertPositiveNumber,
@@ -11,6 +14,7 @@ export {
   errorMessage,
   isKnownError,
   isTransientError,
+  KNOWN_ERROR_CODES,
   KnownError,
   ProcessError,
   TimeoutError,
@@ -44,7 +48,5 @@ export type { IClaudeOptions, ISessionOptions, IToolHandler } from "./types/opti
 export type { TClaudeContent, TClaudeContentType, TClaudeEvent, TClaudeEventType, TClaudeMessage, TModelUsageEntry } from "./types/protocol.js";
 export type { TAskResult, TCostSnapshot } from "./types/results.js";
 export { writer } from "./writer.js";
-
-import { createClient } from "./client.js";
 
 export const claude = createClient();

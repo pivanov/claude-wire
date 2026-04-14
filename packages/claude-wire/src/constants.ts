@@ -9,7 +9,11 @@ export const LIMITS = {
   maxRespawnAttempts: 3,
   sessionMaxTurnsBeforeRecycle: 100,
   ndjsonMaxLineChars: 10 * 1024 * 1024,
+  fingerprintTextLen: 64,
 } as const;
+
+// Respawn backoff in ms, indexed by consecutiveCrashes (1st=500ms, 2nd=1s, 3rd=2s).
+export const RESPAWN_BACKOFF_MS = [500, 1000, 2000] as const;
 
 const home = homedir();
 

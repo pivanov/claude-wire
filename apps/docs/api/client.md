@@ -118,4 +118,9 @@ claude.ask("Classify this text", {
 
 ::: info Dual Budget System
 `maxCostUsd` is SDK-level budget enforcement (throws `BudgetExceededError`). `maxBudgetUsd` is CLI-level enforcement (passed as `--max-budget-usd` flag). They operate independently.
+
+**Which should I use?**
+- For most SDK consumers, prefer `maxCostUsd` — you get a catchable `BudgetExceededError` in JavaScript and a `onCostUpdate` hook for live monitoring.
+- Use `maxBudgetUsd` when you need the CLI to enforce the ceiling itself (e.g. the process is also accessible outside the SDK).
+- Setting both is fine; whichever fires first wins.
 :::

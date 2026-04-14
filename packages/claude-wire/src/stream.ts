@@ -2,8 +2,9 @@ import { createCostTracker } from "./cost.js";
 import { AbortError, ClaudeError, ProcessError } from "./errors.js";
 import { createTranslator } from "./parser/translator.js";
 import { buildResult, extractText } from "./pipeline.js";
+import type { IClaudeProcess } from "./process.js";
 import { spawnClaude } from "./process.js";
-import { readNdjsonEvents } from "./reader.js";
+import { drainStderr, type IStderrDrain, readNdjsonEvents } from "./reader.js";
 import { createToolHandler } from "./tools/handler.js";
 import type { TRelayEvent, TSessionMetaEvent } from "./types/events.js";
 import type { IClaudeOptions } from "./types/options.js";
@@ -15,37 +16,11 @@ export interface IClaudeStream extends AsyncIterable<TRelayEvent>, AsyncDisposab
   result: () => Promise<TAskResult>;
 }
 
-type TStderrDrain = { chunks: string[]; done: Promise<void> };
-
-const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): TStderrDrain => {
-  const chunks: string[] = [];
-  const stderrReader = proc.stderr.getReader();
-  const decoder = new TextDecoder();
-  const done = (async () => {
-    try {
-      while (true) {
-        const { done: isDone, value } = await stderrReader.read();
-        if (isDone) {
-          break;
-        }
-        chunks.push(decoder.decode(value, { stream: true }));
-      }
-    } catch {
-      // process exited
-    } finally {
-      stderrReader.releaseLock();
-    }
-  })().catch(() => {});
-  return { chunks, done };
-};
-
 export const createStream = (prompt: string, options: IClaudeOptions = {}): IClaudeStream => {
   if (options.signal?.aborted) {
     throw new AbortError();
   }
 
-  const proc = spawnClaude({ prompt, ...options });
-  const stderr = drainStderr(proc);
   const translator = createTranslator();
   const toolHandler = options.tools ? createToolHandler(options.tools) : undefined;
   const costTracker = createCostTracker({
@@ -53,10 +28,24 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
     onCostUpdate: options.onCostUpdate,
   });
 
+  let proc: IClaudeProcess | undefined;
+  let stderr: IStderrDrain | undefined;
   let cachedGenerator: AsyncGenerator<TRelayEvent> | undefined;
 
+  const ensureSpawned = (): IClaudeProcess => {
+    if (!proc) {
+      if (options.signal?.aborted) {
+        throw new AbortError();
+      }
+      proc = spawnClaude({ prompt, ...options });
+      stderr = drainStderr(proc);
+    }
+    return proc;
+  };
+
   const generate = async function* (): AsyncGenerator<TRelayEvent> {
-    const stdoutReader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
+    const p = ensureSpawned();
+    const stdoutReader = p.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
     let turnComplete = false;
 
     try {
@@ -64,7 +53,7 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
         reader: stdoutReader,
         translator,
         toolHandler,
-        proc,
+        proc: p,
         signal: options.signal,
       })) {
         if (event.type === "turn_complete") {
@@ -77,21 +66,20 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
       }
 
       if (!turnComplete) {
-        const exitCode = await proc.exited;
+        const exitCode = await p.exited;
         if (exitCode !== 0) {
-          let errorMessage = `Claude process exited with code ${exitCode}`;
-          await stderr.done;
-          const stderrText = stderr.chunks.join("").trim();
-          if (stderrText) {
-            errorMessage = stderrText;
+          if (stderr) {
+            await stderr.done;
           }
-          throw new ProcessError(errorMessage, exitCode);
+          const stderrText = stderr ? stderr.chunks.join("").trim() : "";
+          const exitMsg = stderrText || `Claude process exited with code ${exitCode}`;
+          throw new ProcessError(exitMsg, exitCode);
         }
         throw new ProcessError("Process exited without completing the turn");
       }
     } finally {
       stdoutReader.releaseLock();
-      proc.kill();
+      p.kill();
     }
   };
 
@@ -103,9 +91,10 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
       if (cachedGenerator) {
         throw new ClaudeError("Cannot call text()/cost()/result() after iterating with for-await. Use one or the other.");
       }
+      const gen = generate();
+      cachedGenerator = gen;
       consumePromise = (async () => {
-        cachedGenerator = generate();
-        for await (const event of { [Symbol.asyncIterator]: () => cachedGenerator as AsyncGenerator<TRelayEvent> }) {
+        for await (const event of gen) {
           bufferedEvents.push(event);
         }
       })();
@@ -130,7 +119,10 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
   };
 
   const cleanup = () => {
-    if (!cachedGenerator) {
+    // Always kill if a proc was ever spawned — the generator's finally may not
+    // have run yet (e.g., iterator created but never ticked). Redundant kill
+    // on an already-exited process is a harmless ESRCH.
+    if (proc) {
       proc.kill();
     }
   };

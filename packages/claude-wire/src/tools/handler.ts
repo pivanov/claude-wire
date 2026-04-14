@@ -8,7 +8,7 @@ export interface IToolHandlerInstance {
 }
 
 export const createToolHandler = (options: IToolHandler = {}): IToolHandlerInstance => {
-  const { allowed, blocked, onToolUse } = options;
+  const { allowed, blocked, onToolUse, onError } = options;
 
   const allowedSet = allowed ? new Set(allowed) : undefined;
   const blockedSet = blocked ? new Set(blocked) : undefined;
@@ -22,11 +22,18 @@ export const createToolHandler = (options: IToolHandler = {}): IToolHandlerInsta
       return "deny";
     }
 
-    if (onToolUse) {
-      return onToolUse(tool);
+    if (!onToolUse) {
+      return "approve";
     }
 
-    return "approve";
+    try {
+      return await onToolUse(tool);
+    } catch (error) {
+      if (!onError) {
+        throw error;
+      }
+      return onError(error, tool);
+    }
   };
 
   return { decide };

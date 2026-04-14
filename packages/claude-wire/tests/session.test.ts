@@ -207,6 +207,77 @@ describe("createSession", () => {
     await session.close();
   });
 
+  test("queued ask() runs after a prior ask() rejects", async () => {
+    const failLines = [
+      '{"type":"system","subtype":"init","session_id":"sess-fail","model":"claude-sonnet-4-6","tools":[]}',
+      '{"type":"result","subtype":"error","session_id":"sess-fail","result":"\\"kaboom\\"","is_error":true,"total_cost_usd":0,"duration_ms":10,"modelUsage":{}}',
+    ];
+
+    let call = 0;
+    procFactory = () => {
+      call++;
+      if (call === 1) {
+        // First spawn: emits an error turn_complete; translator surfaces an "error" event
+        // and a turn_complete, so doAsk resolves (no throw). Force a real throw by omitting
+        // turn_complete entirely and closing the stream.
+        return createMockProcess([failLines[0]!]);
+      }
+      return createMockProcess(singleTurnLines);
+    };
+
+    const createSession = await loadCreateSession();
+    const session = createSession({ maxBudgetUsd: 5 });
+
+    const p1 = session.ask("first");
+    const p2 = session.ask("second");
+
+    await expect(p1).rejects.toThrow();
+    const r2 = await p2;
+    expect(r2.text).toContain("Fixed!");
+    expect(spawnCount).toBe(2);
+
+    await session.close();
+  });
+
+  test("retries until maxRespawnAttempts is exhausted within a single ask()", async () => {
+    let spawnIdx = 0;
+    procFactory = () => {
+      spawnIdx++;
+      if (spawnIdx <= 2) {
+        // SIGKILL-like exit: no turn_complete, exit code 137 → transient.
+        return createMockProcess([], 137);
+      }
+      return createMockProcess(singleTurnLines);
+    };
+
+    const createSession = await loadCreateSession();
+    const session = createSession({ maxBudgetUsd: 1 });
+
+    const result = await session.ask("fix the bug");
+    expect(result.text).toContain("Fixed!");
+    expect(spawnCount).toBe(3);
+
+    await session.close();
+  });
+
+  test("BudgetExceededError marks session closed so subsequent asks reject cleanly", async () => {
+    const budgetBusterLines = [
+      '{"type":"system","subtype":"init","session_id":"sess-budget","model":"claude-sonnet-4-6","tools":[]}',
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}',
+      '{"type":"result","subtype":"success","session_id":"sess-budget","result":"\\"ok\\"","is_error":false,"total_cost_usd":5,"duration_ms":10,"modelUsage":{"claude-sonnet-4-6":{"inputTokens":1,"outputTokens":1,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"contextWindow":200000}}}',
+    ];
+
+    procFactory = () => createMockProcess(budgetBusterLines);
+
+    const createSession = await loadCreateSession();
+    const session = createSession({ maxCostUsd: 0.01 });
+
+    await expect(session.ask("first")).rejects.toThrow(/Budget exceeded/);
+    await expect(session.ask("second")).rejects.toThrow("Session is closed");
+
+    await session.close();
+  });
+
   test("close() on closed session is idempotent", async () => {
     const createSession = await loadCreateSession();
     const session = createSession({ maxBudgetUsd: 1 });

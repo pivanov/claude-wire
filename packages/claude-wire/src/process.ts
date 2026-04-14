@@ -35,9 +35,12 @@ const resolveBinaryPath = (): string => {
   return BINARY.name;
 };
 
-const ALIAS_PATTERN = /(?:alias\s+claude\s*=|export\s+).*CLAUDE_CONFIG_DIR=["']?\$?(?:HOME|\{HOME\}|~)\/?([^\s"']+?)["']?(?:\s|\/|$)/;
+// Rejects lines whose first non-whitespace char is `#` so commented-out
+// aliases/exports don't silently apply. /m anchors to each line in rc files.
+export const ALIAS_PATTERN =
+  /^(?!\s*#).*?(?:alias\s+claude\s*=|export\s+).*CLAUDE_CONFIG_DIR=["']?\$?(?:HOME|\{HOME\}|~)\/?([^\s"']+?)["']?(?:\s|$)/m;
 
-const resolveConfigDirFromAlias = (): string | undefined => {
+export const resolveConfigDirFromAlias = (): string | undefined => {
   const home = homedir();
   const rcFiles = [".zshrc", ".bashrc", ".zprofile", ".bash_profile", ".aliases"];
 
@@ -80,21 +83,21 @@ const resolve = (): TResolvedEnv => {
 export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] => {
   const args: string[] = [binaryPath, "-p", "--output-format", "stream-json", "--input-format", "stream-json"];
 
-  if (options.verbose !== false) {
-    args.push("--verbose");
-  }
+  const flag = (cond: unknown, name: string) => {
+    if (cond) {
+      args.push(name);
+    }
+  };
+  const kv = (value: string | undefined, name: string) => {
+    if (value) {
+      args.push(name, value);
+    }
+  };
 
-  if (options.model) {
-    args.push("--model", options.model);
-  }
-
-  if (options.systemPrompt) {
-    args.push("--system-prompt", options.systemPrompt);
-  }
-
-  if (options.appendSystemPrompt) {
-    args.push("--append-system-prompt", options.appendSystemPrompt);
-  }
+  flag(options.verbose !== false, "--verbose");
+  kv(options.model, "--model");
+  kv(options.systemPrompt, "--system-prompt");
+  kv(options.appendSystemPrompt, "--append-system-prompt");
 
   if (options.allowedTools) {
     if (options.allowedTools.length === 0) {
@@ -112,21 +115,10 @@ export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] 
     args.push("--max-budget-usd", String(options.maxBudgetUsd));
   }
 
-  if (options.resume) {
-    args.push("--resume", options.resume);
-  }
-
-  if (options.mcpConfig) {
-    args.push("--mcp-config", options.mcpConfig);
-  }
-
-  if (options.continueSession) {
-    args.push("--continue");
-  }
-
-  if (options.permissionMode) {
-    args.push("--permission-mode", options.permissionMode);
-  }
+  kv(options.resume, "--resume");
+  kv(options.mcpConfig, "--mcp-config");
+  flag(options.continueSession, "--continue");
+  kv(options.permissionMode, "--permission-mode");
 
   if (options.addDirs && options.addDirs.length > 0) {
     for (const dir of options.addDirs) {
@@ -134,45 +126,20 @@ export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] 
     }
   }
 
-  if (options.effort) {
-    args.push("--effort", options.effort);
-  }
-
-  if (options.includeHookEvents) {
-    args.push("--include-hook-events");
-  }
-
-  if (options.includePartialMessages) {
-    args.push("--include-partial-messages");
-  }
-
-  if (options.bare) {
-    args.push("--bare");
-  }
-
-  if (options.jsonSchema) {
-    args.push("--json-schema", options.jsonSchema);
-  }
-
-  if (options.forkSession) {
-    args.push("--fork-session");
-  }
-
-  if (options.noSessionPersistence) {
-    args.push("--no-session-persistence");
-  }
-
-  if (options.sessionId) {
-    args.push("--session-id", options.sessionId);
-  }
+  kv(options.effort, "--effort");
+  flag(options.includeHookEvents, "--include-hook-events");
+  flag(options.includePartialMessages, "--include-partial-messages");
+  flag(options.bare, "--bare");
+  kv(options.jsonSchema, "--json-schema");
+  flag(options.forkSession, "--fork-session");
+  flag(options.noSessionPersistence, "--no-session-persistence");
+  kv(options.sessionId, "--session-id");
 
   if (options.settingSources !== undefined) {
     args.push("--setting-sources", options.settingSources);
   }
 
-  if (options.disableSlashCommands) {
-    args.push("--disable-slash-commands");
-  }
+  flag(options.disableSlashCommands, "--disable-slash-commands");
 
   return args;
 };
@@ -187,12 +154,15 @@ export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
     let spawnEnv: Record<string, string | undefined> | undefined;
 
     if (needsEnv) {
+      // Priority (lowest → highest): process.env < alias-detected config <
+      // user's explicit `options.env` < explicit `options.configDir`. User
+      // input always outranks the alias heuristic.
       spawnEnv = { ...process.env };
-      if (options.env) {
-        Object.assign(spawnEnv, options.env);
-      }
       if (resolved.aliasConfigDir) {
         spawnEnv.CLAUDE_CONFIG_DIR = resolved.aliasConfigDir;
+      }
+      if (options.env) {
+        Object.assign(spawnEnv, options.env);
       }
       if (options.configDir) {
         spawnEnv.CLAUDE_CONFIG_DIR = options.configDir;

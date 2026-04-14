@@ -12,12 +12,19 @@ export interface IClaudeClient {
   create: (defaults: IClaudeOptions) => IClaudeClient;
 }
 
-const mergeOptions = (defaults: IClaudeOptions, overrides?: IClaudeOptions): IClaudeOptions => ({
-  ...defaults,
-  ...overrides,
-  tools: overrides && "tools" in overrides ? (overrides.tools ? { ...defaults.tools, ...overrides.tools } : overrides.tools) : defaults.tools,
-  env: overrides && "env" in overrides ? (overrides.env ? { ...defaults.env, ...overrides.env } : overrides.env) : defaults.env,
-});
+const mergeOptions = (defaults: IClaudeOptions, overrides?: IClaudeOptions): IClaudeOptions => {
+  const merged: IClaudeOptions = { ...defaults, ...overrides };
+
+  if (overrides && "tools" in overrides) {
+    merged.tools = overrides.tools ? { ...defaults.tools, ...overrides.tools } : overrides.tools;
+  }
+
+  if (overrides && "env" in overrides) {
+    merged.env = overrides.env ? { ...defaults.env, ...overrides.env } : overrides.env;
+  }
+
+  return merged;
+};
 
 export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
   const ask = async (prompt: string, options?: IClaudeOptions): Promise<TAskResult> => {

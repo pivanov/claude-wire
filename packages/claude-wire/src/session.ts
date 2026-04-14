@@ -1,11 +1,11 @@
-import { LIMITS, TIMEOUTS } from "./constants.js";
+import { LIMITS, RESPAWN_BACKOFF_MS, TIMEOUTS } from "./constants.js";
 import { createCostTracker } from "./cost.js";
 import { AbortError, BudgetExceededError, ClaudeError, isTransientError, KnownError, ProcessError, TimeoutError } from "./errors.js";
 import { createTranslator } from "./parser/translator.js";
 import { buildResult } from "./pipeline.js";
 import type { IClaudeProcess } from "./process.js";
 import { spawnClaude } from "./process.js";
-import { readNdjsonEvents } from "./reader.js";
+import { drainStderr, readNdjsonEvents } from "./reader.js";
 import { createToolHandler } from "./tools/handler.js";
 import type { TRelayEvent } from "./types/events.js";
 import type { ISessionOptions } from "./types/options.js";
@@ -74,28 +74,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   };
 
   let lastStderrChunks: string[] = [];
-
-  const drainStderr = (p: IClaudeProcess) => {
-    const chunks: string[] = [];
-    lastStderrChunks = chunks;
-    const stderrReader = p.stderr.getReader();
-    const decoder = new TextDecoder();
-    (async () => {
-      try {
-        while (true) {
-          const { done, value } = await stderrReader.read();
-          if (done) {
-            break;
-          }
-          chunks.push(decoder.decode(value, { stream: true }));
-        }
-      } catch {
-        // process exited
-      } finally {
-        stderrReader.releaseLock();
-      }
-    })().catch(() => {});
-  };
+  let lastDrainDone: Promise<void> | undefined;
 
   const getStderrText = (): string => lastStderrChunks.join("").trim();
 
@@ -119,7 +98,17 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     const spawnOpts = resumeId ? { prompt, ...options, resume: resumeId } : { prompt, ...options };
     proc = spawnClaude(spawnOpts);
     reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
-    drainStderr(proc);
+    const drain = drainStderr(proc);
+    lastStderrChunks = drain.chunks;
+    lastDrainDone = drain.done;
+  };
+
+  const respawnBackoff = async (): Promise<void> => {
+    const idx = Math.min(consecutiveCrashes, RESPAWN_BACKOFF_MS.length) - 1;
+    const delay = idx >= 0 ? RESPAWN_BACKOFF_MS[idx] : 0;
+    if (delay) {
+      await new Promise((r) => setTimeout(r, delay));
+    }
   };
 
   const readUntilTurnComplete = async (signal?: AbortSignal): Promise<TRelayEvent[]> => {
@@ -159,8 +148,22 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       if (signal?.aborted) {
         throw new AbortError();
       }
+      // stdout closed → process is dying. Race `exited` against a short
+      // timeout so a zombie/unreaped child doesn't hang us. If exited doesn't
+      // resolve in time we leave exitCode undefined (→ non-transient).
+      let exitCode: number | undefined;
+      if (proc) {
+        const live = proc;
+        exitCode = await Promise.race([live.exited, new Promise<undefined>((r) => setTimeout(() => r(undefined), TIMEOUTS.gracefulExitMs))]);
+        if (exitCode === undefined) {
+          live.kill();
+        }
+      }
+      if (lastDrainDone) {
+        await Promise.race([lastDrainDone, new Promise<void>((r) => setTimeout(r, 500))]);
+      }
       const stderrMsg = getStderrText();
-      throw new ProcessError(stderrMsg || "Process exited without completing the turn");
+      throw new ProcessError(stderrMsg || "Process exited without completing the turn", exitCode);
     }
 
     return events;
@@ -179,28 +182,25 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       }
     }
 
-    let events: TRelayEvent[];
-    try {
-      events = await readUntilTurnComplete(options.signal);
-    } catch (error) {
-      if (error instanceof AbortError || error instanceof TimeoutError) {
-        killProc();
-        throw error;
-      }
-      if (isTransientError(error) && consecutiveCrashes < LIMITS.maxRespawnAttempts) {
-        consecutiveCrashes++;
-        spawnFresh(prompt, currentSessionId);
-        try {
-          events = await readUntilTurnComplete(options.signal);
-        } catch (retryError) {
+    let events: TRelayEvent[] | undefined;
+    while (true) {
+      try {
+        events = await readUntilTurnComplete(options.signal);
+        break;
+      } catch (error) {
+        if (error instanceof AbortError || error instanceof TimeoutError) {
+          killProc();
+          throw error;
+        }
+        if (!isTransientError(error) || consecutiveCrashes >= LIMITS.maxRespawnAttempts) {
           killProc();
           translator.reset();
-          throw retryError;
+          throw error;
         }
-      } else {
-        killProc();
-        translator.reset();
-        throw error;
+        consecutiveCrashes++;
+        await respawnBackoff();
+        spawnFresh(prompt, currentSessionId);
+        // Loop to retry; stops when budget exhausted or turn completes.
       }
     }
 
@@ -228,12 +228,23 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     }
     const prev = inFlight ?? Promise.resolve();
     const run = prev
-      .catch((prevError: unknown) => {
-        if (prevError instanceof KnownError || prevError instanceof BudgetExceededError) {
-          throw prevError;
-        }
+      .catch(() => {
+        // Prior ask failure shouldn't prevent this one from running. Fatal
+        // errors (KnownError/BudgetExceededError) set `closed` in the .catch
+        // below, which the sync check above picks up on the NEXT ask.
       })
-      .then(() => doAsk(prompt));
+      .then(() => {
+        if (closed) {
+          throw new ClaudeError("Session is closed");
+        }
+        return doAsk(prompt);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof KnownError || error instanceof BudgetExceededError) {
+          closed = true;
+        }
+        throw error;
+      });
     inFlight = run;
     return run;
   };
@@ -241,7 +252,9 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   const close = async (): Promise<void> => {
     closed = true;
     if (inFlight) {
-      await inFlight.catch(() => {});
+      // Cap the wait: a stuck reader.read() inside the queued ask would
+      // otherwise hang close() forever before gracefulKill gets a chance.
+      await Promise.race([inFlight.catch(() => {}), new Promise<void>((r) => setTimeout(r, TIMEOUTS.gracefulExitMs))]);
       inFlight = undefined;
     }
     if (proc) {

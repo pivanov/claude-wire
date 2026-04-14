@@ -1,3 +1,4 @@
+import { LIMITS } from "../constants.js";
 import type { TClaudeContent } from "../types/protocol.js";
 
 export const blockFingerprint = (block: TClaudeContent): string => {
@@ -7,7 +8,7 @@ export const blockFingerprint = (block: TClaudeContent): string => {
 
   const text = block.type === "thinking" ? (block.thinking ?? block.text ?? "") : (block.text ?? "");
   if (text) {
-    return `${block.type}:${text.slice(0, 64)}`;
+    return `${block.type}:${text.slice(0, LIMITS.fingerprintTextLen)}`;
   }
 
   return `${block.type}:${block.tool_use_id ?? "unknown"}`;
@@ -24,7 +25,10 @@ export const extractContent = (content: unknown): string => {
 
   if (Array.isArray(content)) {
     return content
-      .filter((block): block is { type: string; text: string } => typeof block === "object" && block !== null && "text" in block)
+      .filter(
+        (block): block is { type: string; text: string } =>
+          typeof block === "object" && block !== null && "text" in block && typeof (block as { text: unknown }).text === "string",
+      )
       .map((block) => block.text)
       .join("\n");
   }

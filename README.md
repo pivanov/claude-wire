@@ -3,8 +3,7 @@
 Run [Claude Code](https://claude.ai/download) programmatically from TypeScript.
 
 [![npm](https://img.shields.io/npm/v/@pivanov/claude-wire)](https://www.npmjs.com/package/@pivanov/claude-wire)
-[![npm bundle size](https://img.shields.io/bundlephobia/minzip/@pivanov/claude-wire)](https://bundlephobia.com/package/@pivanov/claude-wire)
-[![license](https://img.shields.io/npm/l/claude-wire)](./LICENSE)
+[![license](https://img.shields.io/npm/l/@pivanov/claude-wire)](./LICENSE)
 
 ```ts
 import { claude } from "@pivanov/claude-wire";
@@ -26,7 +25,7 @@ console.log(result.costUsd);  // 0.0084
 - **Cost tracking** - per-request budgets with auto-abort
 - **Fully typed** - discriminated union events, full IntelliSense
 - **Resilient** - auto-respawn, transient error detection, AbortSignal
-- **Zero dependencies** - 13 kB gzipped
+- **Zero dependencies** - 16.2 kB gzipped
 
 ## Install
 

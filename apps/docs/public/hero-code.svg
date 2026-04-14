@@ -5,7 +5,7 @@
   <rect x="56" y="14" width="10" height="10" rx="5" fill="#a6e3a1"/>
 
   <text font-family="ui-monospace,SFMono-Regular,Menlo,Monaco,monospace" font-size="15" fill="#cdd6f4">
-    <tspan x="24" y="56" fill="#89b4fa">import</tspan><tspan fill="#cdd6f4"> { </tspan><tspan fill="#f9e2af">claude</tspan><tspan fill="#cdd6f4"> } </tspan><tspan fill="#89b4fa">from</tspan><tspan fill="#a6e3a1"> "claude-wire"</tspan><tspan fill="#cdd6f4">;</tspan>
+    <tspan x="24" y="56" fill="#89b4fa">import</tspan><tspan fill="#cdd6f4"> { </tspan><tspan fill="#f9e2af">claude</tspan><tspan fill="#cdd6f4"> } </tspan><tspan fill="#89b4fa">from</tspan><tspan fill="#a6e3a1"> "@pivanov/claude-wire"</tspan><tspan fill="#cdd6f4">;</tspan>
     <tspan x="24" y="84"></tspan>
     <tspan x="24" y="112" fill="#89b4fa">const</tspan><tspan fill="#cdd6f4"> result = </tspan><tspan fill="#89b4fa">await</tspan><tspan fill="#f9e2af"> claude</tspan><tspan fill="#cdd6f4">.</tspan><tspan fill="#89dceb">ask</tspan><tspan fill="#cdd6f4">(</tspan><tspan fill="#a6e3a1">"Fix the bug"</tspan><tspan fill="#cdd6f4">, {</tspan>
     <tspan x="44" y="138" fill="#cdd6f4">model: </tspan><tspan fill="#a6e3a1">"haiku"</tspan><tspan fill="#cdd6f4">,</tspan>

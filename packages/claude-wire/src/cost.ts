@@ -36,8 +36,8 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
     if (options.onCostUpdate) {
       try {
         options.onCostUpdate(snapshot());
-      } catch {
-        // user callback error - don't crash the stream/session
+      } catch (error) {
+        console.warn("[claude-wire] onCostUpdate callback threw:", error instanceof Error ? error.message : error);
       }
     }
   };

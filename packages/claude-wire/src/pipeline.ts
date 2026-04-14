@@ -1,12 +1,12 @@
 import type { ICostTracker } from "./cost.js";
 import type { IClaudeProcess } from "./process.js";
-import type { IToolHandlerInstance } from "./tools/handler.js";
+import type { IToolHandlerInstance, TToolDecision } from "./tools/handler.js";
 import type { TRelayEvent, TTextEvent, TToolUseEvent, TTurnCompleteEvent } from "./types/events.js";
 import type { TAskResult } from "./types/results.js";
 import { writer } from "./writer.js";
 
 export const dispatchToolDecision = async (proc: IClaudeProcess, toolHandler: IToolHandlerInstance, event: TToolUseEvent): Promise<void> => {
-  let decision: "approve" | "deny" | { result: string };
+  let decision: TToolDecision;
   try {
     decision = await toolHandler.decide(event);
   } catch (error) {

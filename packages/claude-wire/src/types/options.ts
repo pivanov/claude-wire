@@ -6,6 +6,9 @@ export interface IToolHandler {
   allowed?: string[];
   blocked?: string[];
   onToolUse?: (tool: TToolUseEvent) => Promise<TToolDecision>;
+  // Called when `onToolUse` throws. Return a decision to recover, or re-throw
+  // to fall through to the default "deny" behavior. Useful for logging.
+  onError?: (error: unknown, tool: TToolUseEvent) => TToolDecision | Promise<TToolDecision>;
 }
 
 // NOTE: Claude Code CLI has no --max-turns flag. Do not add maxTurns here.
@@ -18,7 +21,17 @@ export interface IClaudeOptions {
   allowedTools?: string[];
   disallowedTools?: string[];
   tools?: IToolHandler;
+  /**
+   * SDK-side budget limit, evaluated after each turn. Throws `BudgetExceededError`
+   * and kills the process when `total_cost_usd` exceeds this value. `0` means
+   * "disallow any spend" (useful for tests).
+   */
   maxCostUsd?: number;
+  /**
+   * CLI-level budget forwarded as `--max-budget-usd`. Enforced by the Claude
+   * binary itself, independent of {@link IClaudeOptions.maxCostUsd}. Either
+   * can fire first; set both for belt-and-suspenders.
+   */
   maxBudgetUsd?: number;
   onCostUpdate?: (cost: TCostSnapshot) => void;
   signal?: AbortSignal;

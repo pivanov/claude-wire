@@ -66,4 +66,30 @@ describe("createToolHandler", () => {
     expect(await handler.decide(makeTool("Bash"))).toBe("deny");
     expect(called).toBe(false);
   });
+
+  test("onToolUse throws and no onError rethrows", async () => {
+    const handler = createToolHandler({
+      onToolUse: async () => {
+        throw new Error("boom");
+      },
+    });
+
+    await expect(handler.decide(makeTool("Read"))).rejects.toThrow("boom");
+  });
+
+  test("onError recovers from onToolUse throws", async () => {
+    const errors: string[] = [];
+    const handler = createToolHandler({
+      onToolUse: async () => {
+        throw new Error("boom");
+      },
+      onError: (err, tool) => {
+        errors.push(`${tool.toolName}:${err instanceof Error ? err.message : ""}`);
+        return "deny";
+      },
+    });
+
+    expect(await handler.decide(makeTool("Read"))).toBe("deny");
+    expect(errors).toEqual(["Read:boom"]);
+  });
 });

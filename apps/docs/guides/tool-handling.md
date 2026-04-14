@@ -58,6 +58,26 @@ The handler receives a `TToolUseEvent` and must return one of:
 - `"deny"` - block the tool
 - `{ result: string }` - skip execution, send this as the tool result
 
+## Error Recovery
+
+If `onToolUse` throws, the stream rejects with the thrown error. Provide `onError` to log, recover, or force a decision:
+
+```ts
+const result = await claude.ask("Fix the bug", {
+  tools: {
+    onToolUse: async (tool) => {
+      return await riskyPolicyCheck(tool);
+    },
+    onError: (err, tool) => {
+      logger.warn(`policy check failed for ${tool.toolName}`, err);
+      return "deny";
+    },
+  },
+});
+```
+
+`onError` returns the same decision shape as `onToolUse`. If it also throws, the error propagates.
+
 ## Precedence
 
 When multiple options are set, they're evaluated in this order:

@@ -53,13 +53,15 @@ const translateContentBlock = (block: TClaudeContent): TRelayEvent | undefined =
       return undefined;
     }
     case "tool_use": {
-      if (!block.id) {
+      // Drop malformed tool_use events entirely. An empty toolName would
+      // otherwise bypass allow/block lists by matching nothing.
+      if (!block.id || !block.name) {
         return undefined;
       }
       return {
         type: "tool_use",
         toolUseId: block.id,
-        toolName: block.name ?? "",
+        toolName: block.name,
         input: typeof block.input === "string" ? block.input : JSON.stringify(block.input ?? {}),
       };
     }

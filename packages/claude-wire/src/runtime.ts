@@ -1,6 +1,7 @@
 import { execFileSync, spawn as nodeSpawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { Readable } from "node:stream";
+import { ProcessError } from "./errors.js";
 
 const isBun = typeof globalThis.Bun !== "undefined";
 
@@ -47,15 +48,6 @@ export const whichSync = (name: string): string | undefined => {
 };
 
 export const fileExists = (path: string): boolean => {
-  if (isBun) {
-    try {
-      accessSync(path, constants.X_OK);
-      return statSync(path).size > 0;
-    } catch {
-      return false;
-    }
-  }
-
   try {
     accessSync(path, constants.X_OK);
     return statSync(path).size > 0;
@@ -92,38 +84,12 @@ const spawnBun = (args: string[], opts: ISpawnOpts): IRawProcess => {
   };
 };
 
-const nodeReadableToWeb = (readable: Readable): ReadableStream<Uint8Array> => {
-  return new ReadableStream({
-    start(controller) {
-      let closed = false;
-      readable.on("data", (chunk: Buffer) => {
-        if (!closed) {
-          controller.enqueue(new Uint8Array(chunk));
-        }
-      });
-      readable.on("end", () => {
-        if (!closed) {
-          closed = true;
-          controller.close();
-        }
-      });
-      readable.on("error", (err) => {
-        if (!closed) {
-          closed = true;
-          controller.error(err);
-        }
-      });
-    },
-    cancel() {
-      readable.destroy();
-    },
-  });
-};
+const toWeb = (readable: Readable): ReadableStream<Uint8Array> => Readable.toWeb(readable) as ReadableStream<Uint8Array>;
 
 const spawnNode = (args: string[], opts: ISpawnOpts): IRawProcess => {
   const [cmd, ...rest] = args;
   if (!cmd) {
-    throw new Error("No command specified");
+    throw new ProcessError("No command specified");
   }
 
   const child = nodeSpawn(cmd, rest, {
@@ -131,6 +97,10 @@ const spawnNode = (args: string[], opts: ISpawnOpts): IRawProcess => {
     stdio: ["pipe", "pipe", "pipe"],
     env: opts.env as NodeJS.ProcessEnv,
   });
+
+  if (child.pid === undefined) {
+    throw new ProcessError(`Failed to spawn ${cmd}: no PID assigned`);
+  }
 
   const exited = new Promise<number>((resolve, reject) => {
     child.on("exit", (code) => {
@@ -142,18 +112,21 @@ const spawnNode = (args: string[], opts: ISpawnOpts): IRawProcess => {
   return {
     stdin: {
       write: (data: string) => {
-        child.stdin?.write(data);
+        if (!child.stdin || child.stdin.destroyed) {
+          throw new ProcessError("Cannot write: stdin is not writable");
+        }
+        child.stdin.write(data);
       },
       end: () => {
         child.stdin?.end();
       },
     },
-    stdout: child.stdout ? nodeReadableToWeb(child.stdout) : new ReadableStream(),
-    stderr: child.stderr ? nodeReadableToWeb(child.stderr) : new ReadableStream(),
+    stdout: child.stdout ? toWeb(child.stdout) : new ReadableStream(),
+    stderr: child.stderr ? toWeb(child.stderr) : new ReadableStream(),
     kill: () => {
       child.kill();
     },
     exited,
-    pid: child.pid ?? 0,
+    pid: child.pid,
   };
 };
