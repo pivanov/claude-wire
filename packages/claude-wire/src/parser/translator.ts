@@ -11,7 +11,12 @@ const extractTokens = (modelUsage?: Record<string, TModelUsageEntry>) => {
     for (const entry of Object.values(modelUsage)) {
       inputTokens = (inputTokens ?? 0) + entry.inputTokens + (entry.cacheReadInputTokens ?? 0) + (entry.cacheCreationInputTokens ?? 0);
       outputTokens = (outputTokens ?? 0) + entry.outputTokens;
-      contextWindow = entry.contextWindow;
+      // Multi-model turns (e.g. sub-agent fan-out) report distinct windows
+      // per model. Take max so consumers see the widest context available,
+      // not whichever model happened to iterate last.
+      if (entry.contextWindow !== undefined && (contextWindow === undefined || entry.contextWindow > contextWindow)) {
+        contextWindow = entry.contextWindow;
+      }
     }
   }
 

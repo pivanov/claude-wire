@@ -8,7 +8,6 @@ export { createCostTracker } from "./cost.js";
 export type { TKnownErrorCode } from "./errors.js";
 export {
   AbortError,
-  assertPositiveNumber,
   BudgetExceededError,
   ClaudeError,
   errorMessage,
@@ -24,7 +23,7 @@ export { parseLine } from "./parser/ndjson.js";
 export type { ITranslator } from "./parser/translator.js";
 export { createTranslator } from "./parser/translator.js";
 export type { IClaudeProcess, ISpawnOptions } from "./process.js";
-export { buildArgs, resetBinaryCache, spawnClaude } from "./process.js";
+export { buildArgs, resetResolvedEnvCache, spawnClaude } from "./process.js";
 export type { IReaderOptions } from "./reader.js";
 export { readNdjsonEvents } from "./reader.js";
 export type { IClaudeSession } from "./session.js";
@@ -33,7 +32,8 @@ export type { IClaudeStream } from "./stream.js";
 export { createStream } from "./stream.js";
 export type { IToolHandlerInstance, TToolDecision } from "./tools/handler.js";
 export { createToolHandler } from "./tools/handler.js";
-export { BUILT_IN_TOOLS, isBuiltInTool } from "./tools/registry.js";
+export type { TBuiltInToolName } from "./tools/registry.js";
+export { BUILT_IN_TOOL_NAMES, BUILT_IN_TOOLS, isBuiltInTool } from "./tools/registry.js";
 export type {
   TErrorEvent,
   TRelayEvent,
@@ -44,7 +44,7 @@ export type {
   TToolUseEvent,
   TTurnCompleteEvent,
 } from "./types/events.js";
-export type { IClaudeOptions, ISessionOptions, IToolHandler } from "./types/options.js";
+export type { IAskOptions, IClaudeOptions, ISessionOptions, IToolHandler } from "./types/options.js";
 export type { TClaudeContent, TClaudeContentType, TClaudeEvent, TClaudeEventType, TClaudeMessage, TModelUsageEntry } from "./types/protocol.js";
 export type { TAskResult, TCostSnapshot } from "./types/results.js";
 export { writer } from "./writer.js";

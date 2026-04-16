@@ -15,7 +15,7 @@ const result = await claude.ask("Analyze this monorepo", {
 If the budget is exceeded, a `BudgetExceededError` is thrown and the process is killed.
 
 ::: tip Test mode
-`maxCostUsd: 0` is valid and means "disallow any spend" — the first turn that reports any cost will throw `BudgetExceededError`. Useful for integration tests that should never hit the API.
+`maxCostUsd: 0` is valid and means "disallow any spend" -- the first turn that reports any cost will throw `BudgetExceededError`. Useful for integration tests that should never hit the API.
 :::
 
 ## Cost Callbacks

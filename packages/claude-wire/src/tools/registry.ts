@@ -1,6 +1,10 @@
 // Best-effort snapshot of known Claude Code tools. May not be exhaustive.
 // For the authoritative list, check session_meta.tools from a live session.
-export const BUILT_IN_TOOLS = new Set([
+//
+// Declared as a literal tuple so `TBuiltInToolName` is the exact union of
+// known names -- lets callers narrow `allowedTools` / `disallowedTools`
+// arrays at compile time instead of accepting any string[].
+export const BUILT_IN_TOOL_NAMES = [
   "Read",
   "Write",
   "Edit",
@@ -11,8 +15,6 @@ export const BUILT_IN_TOOLS = new Set([
   "NotebookEdit",
   "WebFetch",
   "WebSearch",
-  "TodoRead",
-  "TodoWrite",
   "TaskCreate",
   "TaskUpdate",
   "TaskGet",
@@ -36,8 +38,12 @@ export const BUILT_IN_TOOLS = new Set([
   "EnterWorktree",
   "ExitWorktree",
   "ScheduleWakeup",
-]);
+] as const;
 
-export const isBuiltInTool = (name: string): boolean => {
-  return BUILT_IN_TOOLS.has(name);
+export type TBuiltInToolName = (typeof BUILT_IN_TOOL_NAMES)[number];
+
+export const BUILT_IN_TOOLS: ReadonlySet<TBuiltInToolName> = new Set(BUILT_IN_TOOL_NAMES);
+
+export const isBuiltInTool = (name: string): name is TBuiltInToolName => {
+  return (BUILT_IN_TOOLS as ReadonlySet<string>).has(name);
 };

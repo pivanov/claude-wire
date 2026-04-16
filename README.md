@@ -25,7 +25,7 @@ console.log(result.costUsd);  // 0.0084
 - **Cost tracking** - per-request budgets with auto-abort
 - **Fully typed** - discriminated union events, full IntelliSense
 - **Resilient** - auto-respawn, transient error detection, AbortSignal
-- **Zero dependencies** - 16.2 kB gzipped
+- **Zero dependencies** - 25.6 kB gzipped
 
 ## Install
 
@@ -36,6 +36,8 @@ npm install @pivanov/claude-wire
 ```
 
 Requires [Claude Code CLI](https://claude.ai/download) installed and authenticated. Runs on [Bun](https://bun.sh) >= 1.0 or Node.js >= 22.
+
+> **Platform:** POSIX only (macOS, Linux, WSL). Native Windows isn't supported yet -- binary resolution relies on `which` and POSIX path conventions.
 
 > This SDK wraps Claude Code's `--output-format stream-json` protocol, which is not officially documented by Anthropic and may change between releases.
 
@@ -65,7 +67,7 @@ apps/examples/          interactive example runner
 
 ```bash
 bun install
-bun run test        # 147 tests
+bun run test        # 192 tests
 bun run typecheck
 bun run lint
 bun run docs:dev    # local docs server

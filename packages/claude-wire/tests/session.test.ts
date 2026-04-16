@@ -26,7 +26,7 @@ beforeEach(() => {
       return lastMockProc;
     },
     buildArgs: () => [],
-    resetBinaryCache: () => {},
+    resetResolvedEnvCache: () => {},
   }));
 });
 
@@ -297,6 +297,32 @@ describe("createSession", () => {
     await session.close();
 
     await expect(session.ask("another")).rejects.toThrow("Session is closed");
+  });
+
+  test("contract: accepts the exact option shape ls-prove passes", async () => {
+    // Mirrors the call in ls-prove/src/agent/haiku.ts verbatim. If this
+    // shape ever breaks, so does the consumer.
+    const createSession = await loadCreateSession();
+    const session = createSession({
+      model: "haiku",
+      systemPrompt: "you are a helpful assistant",
+      allowedTools: [],
+      settingSources: "",
+      disableSlashCommands: true,
+      permissionMode: "bypassPermissions",
+      maxBudgetUsd: 1,
+    });
+
+    const result = await session.ask("ping");
+
+    // Fields ls-prove reads off TAskResult:
+    expect(typeof result.text).toBe("string");
+    expect(typeof result.costUsd).toBe("number");
+    expect(typeof result.tokens.input).toBe("number");
+    expect(typeof result.tokens.output).toBe("number");
+    expect(session.sessionId).toBeDefined();
+
+    await session.close();
   });
 
   test("asyncDisposable support via Symbol.asyncDispose", async () => {

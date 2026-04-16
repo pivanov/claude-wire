@@ -1,32 +1,74 @@
 import type { ICostTracker } from "./cost.js";
-import type { IClaudeProcess } from "./process.js";
+import type { IClaudeProcess, ISpawnOptions } from "./process.js";
+import { safeWrite, spawnClaude } from "./process.js";
+import { drainStderr, type IStderrDrain } from "./reader.js";
 import type { IToolHandlerInstance, TToolDecision } from "./tools/handler.js";
 import type { TRelayEvent, TTextEvent, TToolUseEvent, TTurnCompleteEvent } from "./types/events.js";
-import type { TAskResult } from "./types/results.js";
+import type { TAskResult, TCostSnapshot } from "./types/results.js";
+import type { TWarn } from "./warnings.js";
+import { createWarn } from "./warnings.js";
 import { writer } from "./writer.js";
 
-export const dispatchToolDecision = async (proc: IClaudeProcess, toolHandler: IToolHandlerInstance, event: TToolUseEvent): Promise<void> => {
+// Return type of startPipeline. Not exported -- consumers get the shape
+// via inference on startPipeline's signature, which is the idiomatic
+// path for "internal struct, public function" pairs.
+interface IPipeline {
+  proc: IClaudeProcess;
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  stderr: IStderrDrain;
+}
+
+// Shared process-boot: spawn the CLI, lock the stdout reader, drain
+// stderr. session.ts and stream.ts both need this exact trio; keeping
+// the order in one place prevents the "one forgot to drain stderr and
+// the other swallows exits silently" class of bug.
+export const startPipeline = (options: ISpawnOptions): IPipeline => {
+  const proc = spawnClaude(options);
+  const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
+  const stderr = drainStderr(proc);
+  return { proc, reader, stderr };
+};
+
+export const dispatchToolDecision = async (
+  proc: IClaudeProcess,
+  toolHandler: IToolHandlerInstance,
+  event: TToolUseEvent,
+  onWarning?: TWarn,
+): Promise<void> => {
+  const warn = createWarn(onWarning);
   let decision: TToolDecision;
   try {
     decision = await toolHandler.decide(event);
   } catch (error) {
-    console.warn(`[claude-wire] Tool handler threw, defaulting to deny: ${error instanceof Error ? error.message : String(error)}`);
+    warn("Tool handler threw, defaulting to deny", error);
     decision = "deny";
   }
-  try {
-    if (decision === "approve") {
-      proc.write(writer.approve(event.toolUseId));
-    } else if (decision === "deny") {
-      proc.write(writer.deny(event.toolUseId));
-    } else if (typeof decision === "object" && decision !== null && typeof decision.result === "string") {
-      proc.write(writer.toolResult(event.toolUseId, decision.result));
-    } else {
-      console.warn("[claude-wire] Invalid tool decision, defaulting to deny");
-      proc.write(writer.deny(event.toolUseId));
-    }
-  } catch {
-    // stdin closed - process died, error will surface through read path
+  if (decision === "approve") {
+    safeWrite(proc, writer.approve(event.toolUseId));
+  } else if (decision === "deny") {
+    safeWrite(proc, writer.deny(event.toolUseId));
+  } else if (typeof decision === "object" && decision !== null && typeof decision.result === "string") {
+    const isError = "isError" in decision ? decision.isError : undefined;
+    safeWrite(proc, writer.toolResult(event.toolUseId, decision.result, isError ? { isError: true } : undefined));
+  } else {
+    warn("Invalid tool decision, defaulting to deny");
+    safeWrite(proc, writer.deny(event.toolUseId));
   }
+};
+
+// Applies a turn_complete event's cumulative totals to the cost tracker
+// and enforces the budget. `offsets` covers session's respawn case where
+// the new process starts its cumulative count from zero but the session
+// wants to carry forward what previous processes already spent -- stream
+// has no such concept and passes it undefined.
+export const applyTurnComplete = (event: TTurnCompleteEvent, costTracker: ICostTracker, offsets?: TCostSnapshot): void => {
+  const base = offsets ?? { totalUsd: 0, inputTokens: 0, outputTokens: 0 };
+  costTracker.update(
+    base.totalUsd + (event.costUsd ?? 0),
+    base.inputTokens + (event.inputTokens ?? 0),
+    base.outputTokens + (event.outputTokens ?? 0),
+  );
+  costTracker.checkBudget();
 };
 
 export const extractText = (events: TRelayEvent[]): string => {

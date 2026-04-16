@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildArgs } from "@/process.js";
+import { buildArgs, buildSpawnEnv } from "@/process.js";
 
 describe("buildArgs", () => {
   const binary = "/usr/local/bin/claude";
@@ -145,5 +145,51 @@ describe("buildArgs", () => {
     expect(args).not.toContain("--continue");
     expect(args).not.toContain("--bare");
     expect(args).not.toContain("--setting-sources");
+  });
+});
+
+describe("buildSpawnEnv", () => {
+  test("returns undefined when nothing overrides the parent env", () => {
+    expect(buildSpawnEnv({ PATH: "/usr/bin" }, undefined, {})).toBeUndefined();
+  });
+
+  test("alias-detected CLAUDE_CONFIG_DIR wins over parent env", () => {
+    const env = buildSpawnEnv({ CLAUDE_CONFIG_DIR: "/from-parent" }, "/from-alias", {});
+    expect(env?.CLAUDE_CONFIG_DIR).toBe("/from-alias");
+  });
+
+  test("options.env CLAUDE_CONFIG_DIR wins over alias", () => {
+    const env = buildSpawnEnv({}, "/from-alias", { env: { CLAUDE_CONFIG_DIR: "/from-options-env" } });
+    expect(env?.CLAUDE_CONFIG_DIR).toBe("/from-options-env");
+  });
+
+  test("options.configDir wins over options.env and alias", () => {
+    const env = buildSpawnEnv({}, "/from-alias", {
+      env: { CLAUDE_CONFIG_DIR: "/from-options-env" },
+      configDir: "/from-options-config-dir",
+    });
+    expect(env?.CLAUDE_CONFIG_DIR).toBe("/from-options-config-dir");
+  });
+
+  test("full 4-way precedence: parent < alias < options.env < options.configDir", () => {
+    const env = buildSpawnEnv(
+      { CLAUDE_CONFIG_DIR: "/parent", PATH: "/bin" },
+      "/alias",
+      {
+        env: { CLAUDE_CONFIG_DIR: "/user-env", EXTRA: "yes" },
+        configDir: "/winner",
+      },
+    );
+    expect(env?.CLAUDE_CONFIG_DIR).toBe("/winner");
+    expect(env?.PATH).toBe("/bin");
+    expect(env?.EXTRA).toBe("yes");
+  });
+
+  test("preserves non-CONFIG_DIR values from options.env", () => {
+    const env = buildSpawnEnv({}, undefined, {
+      env: { ANTHROPIC_API_KEY: "sk-test", DEBUG: "1" },
+    });
+    expect(env?.ANTHROPIC_API_KEY).toBe("sk-test");
+    expect(env?.DEBUG).toBe("1");
   });
 });

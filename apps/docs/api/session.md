@@ -14,7 +14,7 @@ const session = claude.session({
 });
 ```
 
-## `session.ask(prompt)`
+## `session.ask(prompt, options?)`
 
 Send a message and wait for the complete response. Each call reads events until it hits a `turn_complete`, then stops - leaving the process alive for the next call.
 
@@ -27,6 +27,26 @@ console.log(r2.text);
 ```
 
 **Returns:** `Promise<TAskResult>` with the same shape as `claude.ask()`.
+
+### Per-ask options (`IAskOptions`)
+
+Pass a second argument to override session-level callbacks for a single call -- useful for request-scoped logging in daemon-style consumers:
+
+```ts
+async function handleRequest(req) {
+  return session.ask(req.prompt, {
+    onRetry: (attempt, error) => {
+      logger.warn(`req ${req.id} retry ${attempt}`, error);
+    },
+    signal: AbortSignal.timeout(30_000),  // per-request timeout
+  });
+}
+```
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `onRetry` | `(attempt: number, error: unknown) => void` | Per-ask retry observer. Fires alongside the session-level `onRetry` when both are set. |
+| `signal` | `AbortSignal` | Per-ask abort. Aborts this ask only (session stays alive). Composes with the session-level signal -- either firing aborts the ask. |
 
 ## `session.close()`
 
@@ -66,11 +86,41 @@ If `maxCostUsd` is set, a `BudgetExceededError` is thrown when the budget is exc
 
 ## Error Handling
 
-If the Claude process exits unexpectedly, `ask()` throws a `ProcessError`. If the process is killed via `close()`, subsequent `ask()` calls throw a `ClaudeError`.
+`ask()` can reject with several error types:
 
-## Resilience - Auto-Respawn
+- **`ProcessError`** -- the CLI exited without completing the turn (non-transient exit code, stderr attached when available).
+- **`AbortError`** -- an `AbortSignal` fired during the turn.
+- **`BudgetExceededError`** -- `maxCostUsd` was exceeded. The session is marked closed.
+- **`KnownError("retry-exhausted")`** -- auto-respawn budget was used up by consecutive transient failures. The session is marked closed.
+- **`ClaudeError("Session is closed")`** -- a prior fatal error already closed the session, or `close()` was called.
 
-If the Claude process crashes mid-session, the session automatically respawns (up to 3 attempts). The consecutive crash count resets on each successful turn. Cost tracking survives respawns - a cost offset is preserved before each respawn so budget enforcement remains accurate.
+Only `KnownError` and `BudgetExceededError` close the session. All other errors leave it usable; the caller may decide whether to retry at a higher level.
+
+## Resilience -- Auto-Respawn
+
+Transient failures (SIGKILL/SIGTERM/SIGPIPE, `ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, `ENETUNREACH`, `EHOSTUNREACH`, Anthropic `overloaded_error`, broken pipes, etc. -- see [`isTransientError`](./errors.md#istransienterrorerror)) trigger an automatic respawn inside a single `ask()` call.
+
+- **Budget:** up to `LIMITS.maxRespawnAttempts` (currently `3`) respawns per `ask()`.
+- **Backoff:** `500ms → 1s → 2s` between retries.
+- **Cost preservation:** a cost offset is snapshotted before each respawn so cumulative totals and `maxCostUsd` enforcement survive the new process.
+- **Budget exhaustion:** when the cap is reached the session throws `KnownError("retry-exhausted")` and closes itself.
+- **Reset on success:** `consecutiveCrashes` resets to `0` after any turn that completes.
+
+### Observing retries
+
+Pass `onRetry` to see every respawn in progress (does not affect retry behavior):
+
+```ts
+const session = claude.session({
+  model: "sonnet",
+  maxCostUsd: 1.00,
+  onRetry: (attempt, error) => {
+    console.warn(`respawn ${attempt}:`, error);
+  },
+});
+```
+
+Use `onWarning` from `IClaudeOptions` to route library-emitted warnings (user callback threw, invalid tool decision, etc.) through your telemetry instead of the default `console.warn`.
 
 ## Turn Limits
 

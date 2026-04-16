@@ -93,6 +93,7 @@ All methods accept these options:
 | `noSessionPersistence` | `boolean` | Don't save session to disk |
 | `sessionId` | `string` | Use a specific UUID for the session |
 | `onCostUpdate` | `(cost: TCostSnapshot) => void` | Called after each turn with cost data |
+| `onWarning` | `(message: string, cause?: unknown) => void` | Routes all library-emitted warnings. Defaults to `console.warn` prefixed with `[claude-wire]`; pass `() => {}` to silence. |
 | `signal` | `AbortSignal` | Abort signal for cancellation |
 | `resume` | `string` | Session ID to resume |
 | `verbose` | `boolean` | Enable verbose output (default: true) |
@@ -103,6 +104,23 @@ All methods accept these options:
 | `env` | `Record<string, string>` | Custom environment variables for the spawned process |
 | `settingSources` | `string` | Pass `""` to skip loading CLAUDE.md, settings.json, and project instructions |
 | `disableSlashCommands` | `boolean` | Disable slash command loading for faster startup |
+
+### Session-only options
+
+`ISessionOptions` extends `IClaudeOptions` with:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `onRetry` | `(attempt: number, error: unknown) => void` | Fires each time a transient failure triggers a respawn inside one `ask()`. Can also be passed per-ask. See [Session → Resilience](./session.md#resilience--auto-respawn). |
+
+### Per-ask options
+
+`session.ask(prompt, options?)` accepts `IAskOptions`:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `onRetry` | `(attempt: number, error: unknown) => void` | Per-ask retry observer. Fires alongside the session-level `onRetry` when both are set. Useful for request-scoped correlation. |
+| `signal` | `AbortSignal` | Per-ask abort. Aborts this ask only (session stays alive). Composes with the session-level signal -- either firing aborts the ask. |
 
 ::: tip Lightweight / Headless Mode
 For fast startup (~1.5s instead of ~35s), disable tools, settings, and slash commands:
@@ -120,7 +138,7 @@ claude.ask("Classify this text", {
 `maxCostUsd` is SDK-level budget enforcement (throws `BudgetExceededError`). `maxBudgetUsd` is CLI-level enforcement (passed as `--max-budget-usd` flag). They operate independently.
 
 **Which should I use?**
-- For most SDK consumers, prefer `maxCostUsd` — you get a catchable `BudgetExceededError` in JavaScript and a `onCostUpdate` hook for live monitoring.
+- For most SDK consumers, prefer `maxCostUsd` -- you get a catchable `BudgetExceededError` in JavaScript and a `onCostUpdate` hook for live monitoring.
 - Use `maxBudgetUsd` when you need the CLI to enforce the ceiling itself (e.g. the process is also accessible outside the SDK).
 - Setting both is fine; whichever fires first wins.
 :::

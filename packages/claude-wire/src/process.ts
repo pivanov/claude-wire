@@ -2,14 +2,17 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BINARY } from "./constants.js";
-import { assertPositiveNumber, errorMessage, KnownError, ProcessError } from "./errors.js";
-import { fileExists, spawnProcess, whichSync } from "./runtime.js";
+import { errorMessage, KnownError, ProcessError } from "./errors.js";
+import { isExecutableNonEmpty, spawnProcess, whichSync } from "./runtime.js";
 import type { IClaudeOptions } from "./types/options.js";
+import { assertPositiveNumber } from "./validation.js";
 import { writer } from "./writer.js";
 
 export interface IClaudeProcess {
   write: (message: string) => void;
-  kill: () => void;
+  // Signal defaults to SIGTERM. Pass "SIGKILL" for forced termination
+  // (used by gracefulKill as the escalation after SIGTERM times out).
+  kill: (signal?: NodeJS.Signals | number) => void;
   exited: Promise<number>;
   stdout: ReadableStream<Uint8Array>;
   stderr: ReadableStream<Uint8Array>;
@@ -20,6 +23,30 @@ export interface ISpawnOptions extends IClaudeOptions {
   prompt?: string;
 }
 
+// Swallow ESRCH/EPIPE-style throws from kill()/write() when the child is
+// already gone. Every call site had the same try/catch -- keeping it in one
+// place stops future adders from forgetting the guard.
+export const safeKill = (proc: Pick<IClaudeProcess, "kill">, signal?: NodeJS.Signals | number): void => {
+  try {
+    proc.kill(signal);
+  } catch {
+    // already dead
+  }
+};
+
+export const safeWrite = (proc: Pick<IClaudeProcess, "write">, line: string): boolean => {
+  try {
+    proc.write(line);
+    return true;
+  } catch {
+    // stdin closed / process died -- caller surfaces the error via the read path
+    return false;
+  }
+};
+
+// Resolves the `claude` CLI binary path. POSIX-only today: uses `which` and
+// `$HOME`-rooted common install paths. Windows users running under WSL get
+// the Linux layout, which works; native Windows is not supported yet.
 const resolveBinaryPath = (): string => {
   const found = whichSync("claude");
   if (found) {
@@ -27,7 +54,7 @@ const resolveBinaryPath = (): string => {
   }
 
   for (const p of BINARY.commonPaths) {
-    if (fileExists(p)) {
+    if (isExecutableNonEmpty(p)) {
       return p;
     }
   }
@@ -40,9 +67,12 @@ const resolveBinaryPath = (): string => {
 export const ALIAS_PATTERN =
   /^(?!\s*#).*?(?:alias\s+claude\s*=|export\s+).*CLAUDE_CONFIG_DIR=["']?\$?(?:HOME|\{HOME\}|~)\/?([^\s"']+?)["']?(?:\s|$)/m;
 
-export const resolveConfigDirFromAlias = (): string | undefined => {
+const resolveConfigDirFromAlias = (): string | undefined => {
   const home = homedir();
-  const rcFiles = [".zshrc", ".bashrc", ".zprofile", ".bash_profile", ".aliases"];
+  // .zshenv is the one file zsh sources for NON-interactive shells, so
+  // users who export CLAUDE_CONFIG_DIR for cron/CI-like contexts often
+  // put it there. Include it alongside the interactive-shell rc files.
+  const rcFiles = [".zshenv", ".zshrc", ".bashrc", ".zprofile", ".bash_profile", ".aliases"];
 
   for (const rcFile of rcFiles) {
     try {
@@ -66,7 +96,17 @@ type TResolvedEnv = {
 
 let cached: TResolvedEnv | undefined;
 
-export const resetBinaryCache = (): void => {
+/**
+ * Clears the cached resolved environment (binary path + alias-detected
+ * `CLAUDE_CONFIG_DIR`). Call this when either has changed mid-process -- for
+ * example after installing the Claude CLI during a test run, or when a long-
+ * running daemon updates the user's shell rc file. The next `spawnClaude()`
+ * will re-resolve from scratch.
+ *
+ * Normal applications should never need this; the cache is populated once at
+ * first use and kept for the process lifetime.
+ */
+export const resetResolvedEnvCache = (): void => {
   cached = undefined;
 };
 
@@ -94,6 +134,9 @@ export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] 
     }
   };
 
+  // Default ON: the translator's block-dedup relies on --verbose emitting
+  // cumulative assistant content. Consumers must explicitly pass `false`
+  // to opt out (`undefined` still yields --verbose).
   flag(options.verbose !== false, "--verbose");
   kv(options.model, "--model");
   kv(options.systemPrompt, "--system-prompt");
@@ -144,41 +187,66 @@ export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] 
   return args;
 };
 
+// Priority (lowest → highest): baseEnv < alias-detected config <
+// user's explicit `options.env` < explicit `options.configDir`. User
+// input always outranks the alias heuristic. Returns undefined when no
+// override is needed, so spawnProcess can pass the parent env through.
+export const buildSpawnEnv = (
+  baseEnv: Record<string, string | undefined>,
+  aliasConfigDir: string | undefined,
+  options: Pick<ISpawnOptions, "configDir" | "env">,
+): Record<string, string | undefined> | undefined => {
+  const needsEnv = aliasConfigDir || options.configDir || options.env;
+  if (!needsEnv) {
+    return undefined;
+  }
+  const spawnEnv: Record<string, string | undefined> = { ...baseEnv };
+  if (aliasConfigDir) {
+    spawnEnv.CLAUDE_CONFIG_DIR = aliasConfigDir;
+  }
+  if (options.env) {
+    Object.assign(spawnEnv, options.env);
+  }
+  if (options.configDir) {
+    spawnEnv.CLAUDE_CONFIG_DIR = options.configDir;
+  }
+  return spawnEnv;
+};
+
 export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
   assertPositiveNumber(options.maxBudgetUsd, "maxBudgetUsd");
   const resolved = resolve();
   const args = buildArgs(options, resolved.binaryPath);
 
   try {
-    const needsEnv = resolved.aliasConfigDir || options.configDir || options.env;
-    let spawnEnv: Record<string, string | undefined> | undefined;
-
-    if (needsEnv) {
-      // Priority (lowest → highest): process.env < alias-detected config <
-      // user's explicit `options.env` < explicit `options.configDir`. User
-      // input always outranks the alias heuristic.
-      spawnEnv = { ...process.env };
-      if (resolved.aliasConfigDir) {
-        spawnEnv.CLAUDE_CONFIG_DIR = resolved.aliasConfigDir;
-      }
-      if (options.env) {
-        Object.assign(spawnEnv, options.env);
-      }
-      if (options.configDir) {
-        spawnEnv.CLAUDE_CONFIG_DIR = options.configDir;
-      }
-    }
+    const spawnEnv = buildSpawnEnv(process.env, resolved.aliasConfigDir, options);
 
     const rawProc = spawnProcess(args, { cwd: options.cwd, env: spawnEnv });
 
     rawProc.exited.catch(() => {});
 
+    // Tear the child down when the caller's signal aborts. Without this,
+    // a signal that fires BEFORE stdout emits anything leaves the reader
+    // loop to eventually notice -- the child keeps running in the meantime.
+    // Register FIRST, then re-check `aborted`: closes the gap where abort
+    // could fire between the check and listener attach. `once: true` lets
+    // the listener be GC'd after firing.
+    if (options.signal) {
+      const onAbort = () => {
+        safeKill(rawProc);
+      };
+      options.signal.addEventListener("abort", onAbort, { once: true });
+      if (options.signal.aborted) {
+        safeKill(rawProc);
+      }
+    }
+
     const claudeProc: IClaudeProcess = {
       write: (msg: string) => {
         rawProc.stdin.write(msg);
       },
-      kill: () => {
-        rawProc.kill();
+      kill: (signal) => {
+        rawProc.kill(signal);
       },
       exited: rawProc.exited,
       stdout: rawProc.stdout,

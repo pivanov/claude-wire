@@ -94,11 +94,25 @@ try {
 ```
 
 **Properties:**
-- `code` - one of: `"not-authenticated"`, `"binary-not-found"`, `"session-expired"`, `"permission-denied"`, `"invalid-model"`
+- `code: TKnownErrorCode` - one of: `"not-authenticated"`, `"binary-not-found"`, `"permission-denied"`, `"retry-exhausted"`
+
+The `retry-exhausted` code is thrown by `session.ask()` when the respawn budget (`LIMITS.maxRespawnAttempts`, currently 3) has been used up by consecutive transient failures. The session is marked closed and any further `ask()` call rejects with `ClaudeError("Session is closed")`.
+
+```ts
+import { isKnownError } from "@pivanov/claude-wire";
+
+try {
+  await session.ask("...");
+} catch (error) {
+  if (isKnownError(error) && error.code === "retry-exhausted") {
+    // Session is dead -- create a new one before calling ask() again.
+  }
+}
+```
 
 ## `isTransientError(error)`
 
-Detects transient errors that may succeed on retry (network issues, signal kills). Returns `false` for `AbortError` and `BudgetExceededError` (those are intentional, not transient).
+Detects transient errors that may succeed on retry (network issues, signal kills). Returns `false` for `AbortError` and `BudgetExceededError` (those are intentional, not transient). `createSession()` uses this classifier internally to decide which failures trigger auto-respawn.
 
 ```ts
 import { isTransientError } from "@pivanov/claude-wire";
@@ -108,4 +122,9 @@ if (isTransientError(error)) {
 }
 ```
 
-Matches: `fetch failed`, `ECONNREFUSED`, `ETIMEDOUT`, `ECONNRESET`, `EAI_AGAIN`, `network error`, `network timeout`, `EPIPE`, `SIGPIPE`, `broken pipe`, `ProcessError` with exit codes 137 (OOM kill) / 143 (SIGTERM).
+Matches:
+
+- **Network / DNS:** `ECONNREFUSED`, `ECONNRESET`, `ECONNABORTED`, `ETIMEDOUT`, `ENETUNREACH`, `EHOSTUNREACH`, `EAI_AGAIN`, `network error`, `network timeout`, `fetch failed`, `socket hang up`
+- **Pipe / signal:** `EPIPE`, `SIGPIPE`, `broken pipe`
+- **Anthropic overload:** `overloaded_error` (the CLI bubbles up 529 responses verbatim)
+- **Process exit codes:** `137` (SIGKILL / OOM), `141` (SIGPIPE), `143` (SIGTERM)

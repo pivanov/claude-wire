@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { IClaudeProcess } from "@/process.js";
 
 export const createMockProcess = (ndjsonLines: string[], exitCode = 0): IClaudeProcess => {
@@ -117,6 +118,6 @@ export const createMultiTurnMockProcess = () => {
 export type TMultiTurnMockProcess = ReturnType<typeof createMultiTurnMockProcess>;
 
 export const loadFixtureLines = (fixturePath: string): string[] => {
-  const text = require("node:fs").readFileSync(fixturePath, "utf-8") as string;
-  return text.split("\n").filter((line: string) => line.trim() !== "");
+  const text = readFileSync(fixturePath, "utf-8");
+  return text.split("\n").filter((line) => line.trim() !== "");
 };

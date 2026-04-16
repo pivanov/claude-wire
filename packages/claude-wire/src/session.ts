@@ -1,51 +1,108 @@
-import { LIMITS, RESPAWN_BACKOFF_MS, TIMEOUTS } from "./constants.js";
+import { withTimeout } from "./async.js";
+import { LIMITS, MAX_BACKOFF_INDEX, RESPAWN_BACKOFF_MS, TIMEOUTS } from "./constants.js";
 import { createCostTracker } from "./cost.js";
-import { AbortError, BudgetExceededError, ClaudeError, isTransientError, KnownError, ProcessError, TimeoutError } from "./errors.js";
+import { AbortError, BudgetExceededError, ClaudeError, isTransientError, KnownError, processExitedEarly, TimeoutError } from "./errors.js";
 import { createTranslator } from "./parser/translator.js";
-import { buildResult } from "./pipeline.js";
+import { applyTurnComplete, buildResult, startPipeline } from "./pipeline.js";
 import type { IClaudeProcess } from "./process.js";
-import { spawnClaude } from "./process.js";
-import { drainStderr, readNdjsonEvents } from "./reader.js";
+import { safeKill, safeWrite } from "./process.js";
+import { type IStderrDrain, readNdjsonEvents } from "./reader.js";
 import { createToolHandler } from "./tools/handler.js";
 import type { TRelayEvent } from "./types/events.js";
-import type { ISessionOptions } from "./types/options.js";
+import type { IAskOptions, ISessionOptions } from "./types/options.js";
 import type { TAskResult } from "./types/results.js";
 import { writer } from "./writer.js";
 
 export interface IClaudeSession extends AsyncDisposable {
-  ask: (prompt: string) => Promise<TAskResult>;
+  ask: (prompt: string, options?: IAskOptions) => Promise<TAskResult>;
   close: () => Promise<void>;
   sessionId: string | undefined;
 }
 
-const gracefulKill = async (p: IClaudeProcess): Promise<void> => {
-  p.kill();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let timedOut = false;
-  try {
-    await Promise.race([
-      p.exited,
-      new Promise<void>((r) => {
-        timer = setTimeout(() => {
-          timedOut = true;
-          r();
-        }, TIMEOUTS.gracefulExitMs);
-      }),
-    ]);
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
+// Two-stage termination: SIGTERM first, escalate to SIGKILL after the
+// graceful-exit timeout. A stuck child (e.g. blocked on a syscall that
+// ignores SIGTERM) would otherwise survive the "graceful" path and leak.
+// The sentinel value distinguishes "exited on time" from "timeout fired"
+// without a side-channel boolean.
+// Compose two optional AbortSignals into one. If either fires, the
+// returned signal aborts. Returns undefined when both inputs are undefined.
+const composeSignals = (a?: AbortSignal, b?: AbortSignal): AbortSignal | undefined => {
+  if (!a && !b) {
+    return undefined;
   }
-  if (timedOut) {
-    try {
-      p.kill();
-    } catch {
-      // already dead
-    }
+  if (!a) {
+    return b;
+  }
+  if (!b) {
+    return a;
+  }
+  const ctrl = new AbortController();
+  const abort = () => ctrl.abort();
+  a.addEventListener("abort", abort, { once: true });
+  b.addEventListener("abort", abort, { once: true });
+  if (a.aborted || b.aborted) {
+    ctrl.abort();
+  }
+  return ctrl.signal;
+};
+
+// Fire both session-level and per-ask onRetry, swallowing throws from either.
+const fireRetry = (
+  attempt: number,
+  error: unknown,
+  sessionLevel?: (attempt: number, error: unknown) => void,
+  askLevel?: (attempt: number, error: unknown) => void,
+): void => {
+  try {
+    sessionLevel?.(attempt, error);
+  } catch {
+    // observer threw -- retry still happens
+  }
+  try {
+    askLevel?.(attempt, error);
+  } catch {
+    // observer threw -- retry still happens
   }
 };
 
+const KILL_TIMED_OUT = Symbol("kill-timed-out");
+
+const gracefulKill = async (p: IClaudeProcess): Promise<void> => {
+  safeKill(p, "SIGTERM");
+  const outcome = await withTimeout(p.exited, TIMEOUTS.gracefulExitMs, () => KILL_TIMED_OUT);
+  if (outcome === KILL_TIMED_OUT) {
+    safeKill(p, "SIGKILL");
+  }
+};
+
+/**
+ * Creates a multi-turn Claude session backed by a single long-lived CLI
+ * process. Each `ask()` sends a user prompt and resolves with `TAskResult`
+ * for that turn. Calls are serialized -- a second `ask()` waits for the
+ * first to complete. Use `close()` (or `await using`) to free the process.
+ *
+ * ### Retry behavior
+ * Each `ask()` automatically retries transient failures -- process crashes
+ * matching SIGKILL/SIGTERM/SIGPIPE exit codes, `ECONNRESET`, `ECONNREFUSED`,
+ * `ETIMEDOUT`, `EHOSTUNREACH`, `ENETUNREACH`, `EAI_AGAIN`, Anthropic
+ * `overloaded_error` / 529s, broken-pipe / "socket hang up" messages, etc.
+ * (see `isTransientError`). Backoff is `500ms → 1s → 2s`; the budget is
+ * `LIMITS.maxRespawnAttempts` (currently 3) and is shared across a single
+ * `ask()`. When the budget is exhausted the session throws
+ * `KnownError("retry-exhausted")` and marks itself closed.
+ *
+ * Fatal errors -- `KnownError` and `BudgetExceededError` -- also close the
+ * session. Any subsequent `ask()` on a closed session rejects with
+ * `ClaudeError("Session is closed")`. All other errors (abort, timeout,
+ * non-transient `ProcessError`) propagate without closing, and the caller
+ * may decide whether to retry at a higher level.
+ *
+ * ### Observability
+ * - `onCostUpdate(snapshot)` -- fires after every `turn_complete`.
+ * - `onRetry(attempt, error)` -- fires each time a transient failure triggers
+ *   a respawn inside one `ask()`. Attempt is 1-indexed.
+ * - `onWarning(message, cause)` -- routes all library-emitted warnings.
+ */
 export const createSession = (options: ISessionOptions = {}): IClaudeSession => {
   let proc: IClaudeProcess | undefined;
   let currentSessionId: string | undefined;
@@ -56,6 +113,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   const costTracker = createCostTracker({
     maxCostUsd: options.maxCostUsd,
     onCostUpdate: options.onCostUpdate,
+    onWarning: options.onWarning,
   });
   const toolHandler = options.tools ? createToolHandler(options.tools) : undefined;
   let inFlight: Promise<TAskResult> | undefined;
@@ -73,10 +131,11 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     reader = undefined;
   };
 
-  let lastStderrChunks: string[] = [];
-  let lastDrainDone: Promise<void> | undefined;
-
-  const getStderrText = (): string => lastStderrChunks.join("").trim();
+  // Drain handle from the most recent spawn. Stored as a whole so we
+  // can call `.text()` (shared helper on IStderrDrain) instead of
+  // reimplementing chunks.join/trim at every use site.
+  let lastStderrDrain: IStderrDrain | undefined;
+  const getStderrText = (): string => lastStderrDrain?.text() ?? "";
 
   const killProc = () => {
     if (proc) {
@@ -90,21 +149,28 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   const spawnFresh = (prompt?: string, resumeId?: string) => {
     if (consecutiveCrashes >= LIMITS.maxRespawnAttempts) {
       killProc();
-      throw new ProcessError(`Process crashed ${consecutiveCrashes} times, giving up`);
+      // Typed code so consumers can pattern-match on
+      // `KnownError && err.code === "retry-exhausted"` without parsing strings.
+      throw new KnownError("retry-exhausted", `Process crashed ${consecutiveCrashes} times, giving up`);
     }
     costOffsets = costTracker.snapshot();
     killProc();
     translator.reset();
+    // Respawn always overrides caller-supplied options.resume with the live
+    // session id when one is available: mid-session recovery must resume the
+    // same conversation, not whatever static id was passed at construction.
     const spawnOpts = resumeId ? { prompt, ...options, resume: resumeId } : { prompt, ...options };
-    proc = spawnClaude(spawnOpts);
-    reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
-    const drain = drainStderr(proc);
-    lastStderrChunks = drain.chunks;
-    lastDrainDone = drain.done;
+    const pipeline = startPipeline(spawnOpts);
+    proc = pipeline.proc;
+    reader = pipeline.reader;
+    lastStderrDrain = pipeline.stderr;
   };
 
   const respawnBackoff = async (): Promise<void> => {
-    const idx = Math.min(consecutiveCrashes, RESPAWN_BACKOFF_MS.length) - 1;
+    // consecutiveCrashes starts at 1 for the first retry; idx points
+    // into RESPAWN_BACKOFF_MS and clamps to the last defined entry for
+    // any crash count beyond the table length.
+    const idx = Math.min(consecutiveCrashes, MAX_BACKOFF_INDEX) - 1;
     const delay = idx >= 0 ? RESPAWN_BACKOFF_MS[idx] : 0;
     if (delay) {
       await new Promise((r) => setTimeout(r, delay));
@@ -125,6 +191,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       toolHandler,
       proc,
       signal,
+      onWarning: options.onWarning,
     })) {
       if (event.type === "session_meta") {
         currentSessionId = event.sessionId;
@@ -133,12 +200,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       events.push(event);
 
       if (event.type === "turn_complete") {
-        costTracker.update(
-          costOffsets.totalUsd + (event.costUsd ?? 0),
-          costOffsets.inputTokens + (event.inputTokens ?? 0),
-          costOffsets.outputTokens + (event.outputTokens ?? 0),
-        );
-        costTracker.checkBudget();
+        applyTurnComplete(event, costTracker, costOffsets);
         gotTurnComplete = true;
         break;
       }
@@ -148,44 +210,51 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       if (signal?.aborted) {
         throw new AbortError();
       }
-      // stdout closed → process is dying. Race `exited` against a short
-      // timeout so a zombie/unreaped child doesn't hang us. If exited doesn't
-      // resolve in time we leave exitCode undefined (→ non-transient).
+      // stdout closed → process is dying. Wait briefly for exited so we
+      // can attach an exit code to the error; if it doesn't resolve in
+      // time, force-kill and leave exitCode undefined (→ non-transient).
       let exitCode: number | undefined;
       if (proc) {
         const live = proc;
-        exitCode = await Promise.race([live.exited, new Promise<undefined>((r) => setTimeout(() => r(undefined), TIMEOUTS.gracefulExitMs))]);
+        exitCode = await withTimeout<number, undefined>(live.exited, TIMEOUTS.gracefulExitMs);
         if (exitCode === undefined) {
           live.kill();
         }
       }
-      if (lastDrainDone) {
-        await Promise.race([lastDrainDone, new Promise<void>((r) => setTimeout(r, 500))]);
+      if (lastStderrDrain) {
+        await withTimeout(lastStderrDrain.done, TIMEOUTS.stderrDrainGraceMs);
       }
-      const stderrMsg = getStderrText();
-      throw new ProcessError(stderrMsg || "Process exited without completing the turn", exitCode);
+      throw processExitedEarly(getStderrText(), exitCode);
     }
 
     return events;
   };
 
-  const doAsk = async (prompt: string): Promise<TAskResult> => {
+  const doAsk = async (prompt: string, askOpts?: IAskOptions): Promise<TAskResult> => {
     if (!proc) {
       spawnFresh(prompt, currentSessionId);
-    } else {
+    } else if (!safeWrite(proc, writer.user(prompt))) {
+      // stdin write failed -- process probably died. Try to respawn.
+      // spawnFresh can itself throw ProcessError synchronously when the
+      // respawn cap is already hit; surface as an Error like the retry
+      // loop below would, instead of a raw synchronous throw.
+      consecutiveCrashes++;
+      translator.reset();
       try {
-        proc.write(writer.user(prompt));
-      } catch {
-        consecutiveCrashes++;
-        translator.reset();
         spawnFresh(prompt, currentSessionId);
+      } catch (respawnError) {
+        killProc();
+        throw respawnError;
       }
     }
+
+    // Compose per-ask signal with session-level signal: either firing aborts.
+    const effectiveSignal = composeSignals(options.signal, askOpts?.signal);
 
     let events: TRelayEvent[] | undefined;
     while (true) {
       try {
-        events = await readUntilTurnComplete(options.signal);
+        events = await readUntilTurnComplete(effectiveSignal);
         break;
       } catch (error) {
         if (error instanceof AbortError || error instanceof TimeoutError) {
@@ -198,6 +267,9 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
           throw error;
         }
         consecutiveCrashes++;
+        // Fire both session-level and per-ask onRetry. Both are safe-invoked
+        // so a throwing observer doesn't prevent the retry.
+        fireRetry(consecutiveCrashes, error, options.onRetry, askOpts?.onRetry);
         await respawnBackoff();
         spawnFresh(prompt, currentSessionId);
         // Loop to retry; stops when budget exhausted or turn completes.
@@ -222,7 +294,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
 
   let closed = false;
 
-  const ask = (prompt: string): Promise<TAskResult> => {
+  const ask = (prompt: string, askOpts?: IAskOptions): Promise<TAskResult> => {
     if (closed) {
       return Promise.reject(new ClaudeError("Session is closed"));
     }
@@ -237,7 +309,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
         if (closed) {
           throw new ClaudeError("Session is closed");
         }
-        return doAsk(prompt);
+        return doAsk(prompt, askOpts);
       })
       .catch((error: unknown) => {
         if (error instanceof KnownError || error instanceof BudgetExceededError) {
@@ -254,15 +326,14 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     if (inFlight) {
       // Cap the wait: a stuck reader.read() inside the queued ask would
       // otherwise hang close() forever before gracefulKill gets a chance.
-      await Promise.race([inFlight.catch(() => {}), new Promise<void>((r) => setTimeout(r, TIMEOUTS.gracefulExitMs))]);
+      await withTimeout(
+        inFlight.catch(() => {}),
+        TIMEOUTS.gracefulExitMs,
+      );
       inFlight = undefined;
     }
     if (proc) {
-      try {
-        proc.write(writer.abort());
-      } catch {
-        // stdin may already be closed
-      }
+      safeWrite(proc, writer.abort());
       await gracefulKill(proc);
       proc = undefined;
     }

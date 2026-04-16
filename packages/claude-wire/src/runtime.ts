@@ -5,16 +5,18 @@ import { ProcessError } from "./errors.js";
 
 const isBun = typeof globalThis.Bun !== "undefined";
 
-export interface IRawProcess {
+// Internal-only: consumers get the shape via inference on spawnProcess.
+// Keeping these unexported prevents accidental public-surface growth.
+interface IRawProcess {
   stdin: { write: (data: string) => void; end: () => void };
   stdout: ReadableStream<Uint8Array>;
   stderr: ReadableStream<Uint8Array>;
-  kill: () => void;
+  kill: (signal?: NodeJS.Signals | number) => void;
   exited: Promise<number>;
   pid: number;
 }
 
-export interface ISpawnOpts {
+interface ISpawnOpts {
   cwd?: string;
   env?: Record<string, string | undefined>;
 }
@@ -47,7 +49,10 @@ export const whichSync = (name: string): string | undefined => {
   }
 };
 
-export const fileExists = (path: string): boolean => {
+// Used to vet candidate `claude` binary paths -- a zero-byte stub or a
+// non-executable regular file both count as "not a usable binary" here.
+// Name reflects behavior: this is NOT a generic fs.exists check.
+export const isExecutableNonEmpty = (path: string): boolean => {
   try {
     accessSync(path, constants.X_OK);
     return statSync(path).size > 0;
@@ -76,8 +81,8 @@ const spawnBun = (args: string[], opts: ISpawnOpts): IRawProcess => {
     },
     stdout: proc.stdout as ReadableStream<Uint8Array>,
     stderr: proc.stderr as ReadableStream<Uint8Array>,
-    kill: () => {
-      proc.kill();
+    kill: (signal) => {
+      proc.kill(signal);
     },
     exited: proc.exited,
     pid: proc.pid,
@@ -123,8 +128,8 @@ const spawnNode = (args: string[], opts: ISpawnOpts): IRawProcess => {
     },
     stdout: child.stdout ? toWeb(child.stdout) : new ReadableStream(),
     stderr: child.stderr ? toWeb(child.stderr) : new ReadableStream(),
-    kill: () => {
-      child.kill();
+    kill: (signal) => {
+      child.kill(signal);
     },
     exited,
     pid: child.pid,

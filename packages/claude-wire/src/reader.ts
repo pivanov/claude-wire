@@ -4,8 +4,11 @@ import { parseLine } from "./parser/ndjson.js";
 import type { ITranslator } from "./parser/translator.js";
 import { dispatchToolDecision } from "./pipeline.js";
 import type { IClaudeProcess } from "./process.js";
+import { safeKill, safeWrite } from "./process.js";
 import type { IToolHandlerInstance } from "./tools/handler.js";
 import type { TRelayEvent } from "./types/events.js";
+import type { TClaudeEvent } from "./types/protocol.js";
+import type { TWarn } from "./warnings.js";
 import { writer } from "./writer.js";
 
 export interface IReaderOptions {
@@ -14,11 +17,16 @@ export interface IReaderOptions {
   toolHandler?: IToolHandlerInstance;
   proc?: IClaudeProcess;
   signal?: AbortSignal;
+  onWarning?: TWarn;
 }
 
 export interface IStderrDrain {
   chunks: string[];
   done: Promise<void>;
+  // Accumulated stderr text, trimmed. Shared helper so session.ts and
+  // stream.ts don't each reimplement `chunks.join("").trim()` -- keeps
+  // behavior consistent if we ever need to cap length or sanitize.
+  text: () => string;
 }
 
 export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): IStderrDrain => {
@@ -45,7 +53,11 @@ export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): IStde
       stderrReader.releaseLock();
     }
   })().catch(() => {});
-  return { chunks, done };
+  return {
+    chunks,
+    done,
+    text: () => chunks.join("").trim(),
+  };
 };
 
 export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TRelayEvent> {
@@ -62,13 +74,30 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
   // Swallow unhandled rejection if nothing ever races against this promise.
   abortPromise.catch(() => {});
 
-  // Single resettable timeout shared across all iterations — avoids leaking
+  // Single resettable timeout shared across all iterations -- avoids leaking
   // a new Promise + setTimeout per read loop.
   let timeoutReject: ((err: Error) => void) | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutReject = reject;
   });
   timeoutPromise.catch(() => {});
+  // Shared per-raw-event dispatch. Used by both the main read loop and the
+  // trailing-buffer flush so the translate → tool-dispatch → yield sequence
+  // lives in one place. `!turnComplete` guards dispatch so we don't approve
+  // or deny a tool call the CLI emits after it already said it's done.
+  const processRaw = async function* (raw: TClaudeEvent): AsyncGenerator<TRelayEvent> {
+    const translated = translator.translate(raw);
+    for (const event of translated) {
+      if (event.type === "tool_use" && !turnComplete && opts.toolHandler && opts.proc) {
+        await dispatchToolDecision(opts.proc, opts.toolHandler, event, opts.onWarning);
+      }
+      yield event;
+      if (event.type === "turn_complete") {
+        turnComplete = true;
+      }
+    }
+  };
+
   const resetReadTimeout = () => {
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -82,12 +111,8 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
     ? () => {
         abortReject?.(new AbortError());
         if (opts.proc) {
-          try {
-            opts.proc.write(writer.abort());
-          } catch {
-            // stdin closed
-          }
-          opts.proc.kill();
+          safeWrite(opts.proc, writer.abort());
+          safeKill(opts.proc);
         }
       }
     : undefined;
@@ -115,8 +140,12 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
 
       buffer += decoder.decode(value, { stream: true });
 
+      // The limit applies to the accumulated buffer (which contains at most
+      // one in-progress line plus any already-split lines being held), so
+      // a single oversize line trips the same guard. Name is legacy -- the
+      // check is effectively "no NDJSON message may grow past this size".
       if (buffer.length > LIMITS.ndjsonMaxLineChars) {
-        throw new ClaudeError(`NDJSON buffer exceeded ${LIMITS.ndjsonMaxLineChars} chars`);
+        throw new ClaudeError(`NDJSON buffer exceeded ${LIMITS.ndjsonMaxLineChars} chars (single line or accumulated pending lines)`);
       }
 
       const lines = buffer.split("\n");
@@ -127,18 +156,7 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
         if (!raw) {
           continue;
         }
-
-        const events = translator.translate(raw);
-
-        for (const event of events) {
-          if (event.type === "tool_use" && opts.toolHandler && opts.proc) {
-            await dispatchToolDecision(opts.proc, opts.toolHandler, event);
-          }
-          yield event;
-          if (event.type === "turn_complete") {
-            turnComplete = true;
-          }
-        }
+        yield* processRaw(raw);
       }
 
       if (turnComplete) {
@@ -149,16 +167,7 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
     if (buffer.trim()) {
       const raw = parseLine(buffer);
       if (raw) {
-        const events = translator.translate(raw);
-        for (const event of events) {
-          if (event.type === "tool_use" && opts.toolHandler && opts.proc && !turnComplete) {
-            await dispatchToolDecision(opts.proc, opts.toolHandler, event);
-          }
-          yield event;
-          if (event.type === "turn_complete") {
-            turnComplete = true;
-          }
-        }
+        yield* processRaw(raw);
       }
     }
   } finally {

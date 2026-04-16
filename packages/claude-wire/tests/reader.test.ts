@@ -147,7 +147,7 @@ describe("drainStderr", () => {
   });
 });
 
-// Light smoke test to document intent — a timeout-only test would take ~300s.
+// Light smoke test to document intent -- a timeout-only test would take ~300s.
 describe("readNdjsonEvents shape", () => {
   test("accepts proc + toolHandler for tool dispatch path", async () => {
     const stdout = makeStdout([

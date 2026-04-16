@@ -1,5 +1,8 @@
-import { assertPositiveNumber, BudgetExceededError } from "./errors.js";
+import { BudgetExceededError } from "./errors.js";
 import type { TCostSnapshot } from "./types/results.js";
+import { assertPositiveNumber } from "./validation.js";
+import type { TWarn } from "./warnings.js";
+import { createWarn } from "./warnings.js";
 
 export interface ICostTracker {
   // All values are REPLACEMENTS, not deltas. The wire protocol's total_cost_usd
@@ -13,10 +16,12 @@ export interface ICostTracker {
 export interface ICostTrackerOptions {
   maxCostUsd?: number;
   onCostUpdate?: (cost: TCostSnapshot) => void;
+  onWarning?: TWarn;
 }
 
 export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTracker => {
   assertPositiveNumber(options.maxCostUsd, "maxCostUsd");
+  const warn = createWarn(options.onWarning);
 
   let totalUsd = 0;
   let inputTokens = 0;
@@ -37,7 +42,7 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
       try {
         options.onCostUpdate(snapshot());
       } catch (error) {
-        console.warn("[claude-wire] onCostUpdate callback threw:", error instanceof Error ? error.message : error);
+        warn("onCostUpdate callback threw", error);
       }
     }
   };

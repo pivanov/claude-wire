@@ -3,6 +3,9 @@ import { homedir } from "node:os";
 export const TIMEOUTS = {
   defaultAbortMs: 300_000,
   gracefulExitMs: 5_000,
+  // Grace period for stderr drain to catch up before an error is thrown so
+  // the error message carries the CLI's actual complaint instead of "".
+  stderrDrainGraceMs: 500,
 } as const;
 
 export const LIMITS = {
@@ -14,6 +17,11 @@ export const LIMITS = {
 
 // Respawn backoff in ms, indexed by consecutiveCrashes (1st=500ms, 2nd=1s, 3rd=2s).
 export const RESPAWN_BACKOFF_MS = [500, 1000, 2000] as const;
+
+// Highest index into RESPAWN_BACKOFF_MS[]. Used by respawnBackoff() to
+// clamp the delay lookup to the last defined backoff when crashes exceed
+// the table length -- keeps the table and its bound co-located.
+export const MAX_BACKOFF_INDEX = RESPAWN_BACKOFF_MS.length;
 
 const home = homedir();
 

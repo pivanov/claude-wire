@@ -39,7 +39,10 @@ export class ProcessError extends ClaudeError {
   }
 }
 
-export const KNOWN_ERROR_CODES = ["not-authenticated", "binary-not-found", "session-expired", "permission-denied", "invalid-model"] as const;
+// Only codes the SDK actually constructs are listed. Add a new code here
+// alongside the throw site that needs it -- aspirational entries give
+// consumers false confidence that they can pattern-match on them.
+export const KNOWN_ERROR_CODES = ["not-authenticated", "binary-not-found", "permission-denied", "retry-exhausted"] as const;
 
 export type TKnownErrorCode = (typeof KNOWN_ERROR_CODES)[number];
 
@@ -57,8 +60,12 @@ export const isKnownError = (error: unknown): error is KnownError => {
   return error instanceof KnownError;
 };
 
+// Network-level transients (ECONNRESET/REFUSED/ABORTED, ENETUNREACH, EHOSTUNREACH),
+// DNS transients (EAI_AGAIN), pipe resets (EPIPE/SIGPIPE, broken pipe), fetch
+// errors, ad-hoc "socket hang up" messages from node, and Anthropic
+// overloaded_error which the CLI bubbles up verbatim for 529 responses.
 const TRANSIENT_PATTERN =
-  /fetch failed|ECONNREFUSED|ETIMEDOUT|ECONNRESET|ECONNABORTED|ENETUNREACH|EAI_AGAIN|network error|network timeout|EPIPE|SIGPIPE|broken pipe/i;
+  /fetch failed|ECONNREFUSED|ETIMEDOUT|ECONNRESET|ECONNABORTED|ENETUNREACH|EHOSTUNREACH|EAI_AGAIN|network error|network timeout|EPIPE|SIGPIPE|broken pipe|socket hang up|overloaded_error/i;
 
 // Exit codes we treat as transient: 137 = SIGKILL (OOM), 141 = SIGPIPE,
 // 143 = SIGTERM. Non-zero normal exits (e.g. 1) stay non-transient.
@@ -79,9 +86,9 @@ export const errorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : String(error);
 };
 
-export const assertPositiveNumber = (value: number | undefined, name: string): void => {
-  // Allow 0 so callers can express "no spend permitted" (useful in tests).
-  if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
-    throw new ClaudeError(`${name} must be a finite non-negative number`);
-  }
-};
+// Shared error factory for the "process died before emitting turn_complete"
+// case. session.ts + stream.ts both need this; the string used to be
+// duplicated verbatim, which drifted at least once. Prefix stderr when
+// available because CLI error output is the most actionable signal.
+export const processExitedEarly = (stderr: string, exitCode?: number): ProcessError =>
+  new ProcessError(stderr || "Process exited without completing the turn", exitCode);

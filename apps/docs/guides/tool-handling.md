@@ -56,7 +56,19 @@ const result = await claude.ask("Fix the bug", {
 The handler receives a `TToolUseEvent` and must return one of:
 - `"approve"` - let the tool execute
 - `"deny"` - block the tool
-- `{ result: string }` - skip execution, send this as the tool result
+- `{ result: string }` - skip execution, send this as the (successful) tool result
+- `{ result: string, isError: true }` - same, but mark the result as an error so the model treats it as a tool-side failure and can react (retry, fall back, apologize) instead of treating it as success
+
+```ts
+tools: {
+  onToolUse: async (tool) => {
+    if (tool.toolName === "Bash" && isDestructive(tool.input)) {
+      return { result: "Destructive shell commands are disabled in this sandbox.", isError: true };
+    }
+    return "approve";
+  },
+},
+```
 
 ## Error Recovery
 

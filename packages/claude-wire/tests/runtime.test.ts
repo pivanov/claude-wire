@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileExists, spawnProcess, whichSync } from "@/runtime.js";
+import { isExecutableNonEmpty, spawnProcess, whichSync } from "@/runtime.js";
 
 describe("whichSync", () => {
   test("finds a shell built-in binary that exists on PATH", () => {
@@ -18,23 +18,23 @@ describe("whichSync", () => {
   });
 });
 
-describe("fileExists", () => {
+describe("isExecutableNonEmpty", () => {
   test("returns true for a writable, non-empty executable", () => {
     const dir = mkdtempSync(join(tmpdir(), "cw-fileexists-"));
     const path = join(dir, "bin");
     writeFileSync(path, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-    expect(fileExists(path)).toBe(true);
+    expect(isExecutableNonEmpty(path)).toBe(true);
   });
 
   test("returns false for an empty file", () => {
     const dir = mkdtempSync(join(tmpdir(), "cw-empty-"));
     const path = join(dir, "empty");
     writeFileSync(path, "", { mode: 0o755 });
-    expect(fileExists(path)).toBe(false);
+    expect(isExecutableNonEmpty(path)).toBe(false);
   });
 
   test("returns false for a missing path", () => {
-    expect(fileExists("/tmp/cw-does-not-exist-xyz-12345")).toBe(false);
+    expect(isExecutableNonEmpty("/tmp/cw-does-not-exist-xyz-12345")).toBe(false);
   });
 });
 

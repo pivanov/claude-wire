@@ -91,7 +91,7 @@ describe("createStream", () => {
     }
 
     // Now text() should throw (synchronously in ensureConsumed)
-    await expect(stream.text()).rejects.toThrow("Cannot call text()/cost()/result() after iterating with for-await");
+    await expect(stream.text()).rejects.toThrow(/Cannot mix for-await iteration/);
   });
 
   test("throws when text() then for-await are mixed", async () => {
@@ -105,7 +105,7 @@ describe("createStream", () => {
     expect(() => {
       const iter = stream[Symbol.asyncIterator]();
       return iter;
-    }).toThrow("Cannot iterate after calling text()/cost()/result()");
+    }).toThrow(/Cannot mix for-await iteration/);
   });
 
   test("tool dispatch writes approve to stdin for approved tools", async () => {
@@ -254,6 +254,24 @@ describe("createStream", () => {
 
     await expect(iterate).rejects.toThrow(/aborted/i);
     expect(seen[0]).toBe("session_meta");
+  });
+
+  test("re-iterating the stream yields nothing (generator is cached, already consumed)", async () => {
+    const createStream = await loadCreateStream();
+    const stream = createStream("fix the bug", { maxBudgetUsd: 1 });
+
+    const first: string[] = [];
+    for await (const event of stream) {
+      first.push(event.type);
+    }
+
+    const second: string[] = [];
+    for await (const event of stream) {
+      second.push(event.type);
+    }
+
+    expect(first.length).toBeGreaterThan(0);
+    expect(second).toEqual([]);
   });
 
   test("streams multi-agent fixture data correctly", async () => {
