@@ -26,6 +26,34 @@ type TAskResult = {
 };
 ```
 
+## `claude.askJson(prompt, schema, options?)`
+
+Send a prompt, parse the response as JSON, and validate it against a schema. Returns `{ data: T, raw: TAskResult }`.
+
+```ts
+import { z } from "zod";
+
+const { data } = await claude.askJson(
+  "List 3 colors as JSON: { colors: string[] }",
+  z.object({ colors: z.array(z.string()) }),
+);
+
+console.log(data.colors); // ["red", "green", "blue"]
+```
+
+Accepts [Standard Schema](https://github.com/standard-schema/standard-schema) objects (Zod, Valibot, ArkType) for typed validation, or a raw JSON Schema string that gets forwarded to `--json-schema` for CLI-side constraint (parse-only, no TypeScript inference).
+
+Throws `JsonValidationError` with `{ rawText, issues }` when parsing or validation fails. See [Errors](./errors.md#jsonvalidationerror).
+
+**Returns:** `Promise<IJsonResult<T>>`
+
+```ts
+type IJsonResult<T> = {
+  data: T;            // validated and typed result
+  raw: TAskResult;    // full ask result (text, cost, tokens, events)
+};
+```
+
 ## `claude.stream(prompt, options?)`
 
 Returns an `IClaudeStream` - an async iterable that yields events as they arrive.
@@ -79,7 +107,7 @@ All methods accept these options:
 | `systemPrompt` | `string` | Override system prompt |
 | `appendSystemPrompt` | `string` | Append to default system prompt |
 | `allowedTools` | `string[]` | Tools to allow (CLI-level). Pass `[]` to disable all tools including MCP servers. |
-| `tools` | `IToolHandler` | Runtime tool control (approve/deny/intercept) |
+| `toolHandler` | `IToolHandler` | Runtime tool control (approve/deny/intercept) |
 | `maxCostUsd` | `number` | SDK-side budget limit. Checked after each turn, throws `BudgetExceededError` and kills the process |
 | `maxBudgetUsd` | `number` | Claude Code native budget via `--max-budget-usd`. Enforced by the CLI itself |
 | `disallowedTools` | `string[]` | Tools to deny at CLI level |

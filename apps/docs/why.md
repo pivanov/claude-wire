@@ -22,7 +22,7 @@ Run Claude Code in CI pipelines with strict cost budgets and tool restrictions. 
 const result = await claude.ask("Fix all TypeScript errors in src/", {
   cwd: process.env.GITHUB_WORKSPACE,
   maxCostUsd: 0.50,
-  tools: { blocked: ["Bash"] },
+  toolHandler: { blocked: ["Bash"] },
 });
 
 if (result.text.includes("Fixed")) {
@@ -69,7 +69,7 @@ Build approval gates where humans or other systems decide whether Claude can use
 
 ```ts
 const result = await claude.ask("Deploy the new version", {
-  tools: {
+  toolHandler: {
     onToolUse: async (tool) => {
       await slackNotify(`Claude wants to run: ${tool.toolName}`);
       const approved = await waitForApproval(tool.toolUseId);
@@ -116,7 +116,7 @@ for (const line of lines) {
   const events = translator.translate(raw);
   for (const event of events) {
     if (event.type === "tool_use") {
-      console.log(`Tool: ${event.toolName}, Input: ${event.input}`);
+      console.log(`Tool: ${event.toolName}, Input: ${JSON.stringify(event.input)}`);
     }
   }
 }
@@ -128,7 +128,7 @@ Use the tool handler to mock Claude Code's tool results in tests. No real file s
 
 ```ts
 const result = await claude.ask("Read config.json and validate it", {
-  tools: {
+  toolHandler: {
     onToolUse: async (tool) => {
       if (tool.toolName === "Read") {
         return { result: '{"valid": true}' };

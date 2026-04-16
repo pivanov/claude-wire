@@ -42,7 +42,18 @@ export class ProcessError extends ClaudeError {
 // Only codes the SDK actually constructs are listed. Add a new code here
 // alongside the throw site that needs it -- aspirational entries give
 // consumers false confidence that they can pattern-match on them.
-export const KNOWN_ERROR_CODES = ["not-authenticated", "binary-not-found", "permission-denied", "retry-exhausted"] as const;
+export const KNOWN_ERROR_CODES = [
+  "not-authenticated",
+  "binary-not-found",
+  "permission-denied",
+  "retry-exhausted",
+  // Classified from stderr by classifyStderr (src/stderr.ts):
+  "rate-limit",
+  "overloaded",
+  "context-length-exceeded",
+  "invalid-json-schema",
+  "mcp-error",
+] as const;
 
 export type TKnownErrorCode = (typeof KNOWN_ERROR_CODES)[number];
 
@@ -90,5 +101,21 @@ export const errorMessage = (error: unknown): string => {
 // case. session.ts + stream.ts both need this; the string used to be
 // duplicated verbatim, which drifted at least once. Prefix stderr when
 // available because CLI error output is the most actionable signal.
-export const processExitedEarly = (stderr: string, exitCode?: number): ProcessError =>
-  new ProcessError(stderr || "Process exited without completing the turn", exitCode);
+// Auto-promotes to KnownError when stderr matches a classifiable pattern.
+// The classifier is injected to avoid a circular import (stderr.ts imports
+// types from this file). Wire it at boot via `setStderrClassifier`.
+let stderrClassifier: ((stderr: string, exitCode?: number) => TKnownErrorCode | undefined) | undefined;
+
+export const setStderrClassifier = (fn: typeof stderrClassifier): void => {
+  stderrClassifier = fn;
+};
+
+export const processExitedEarly = (stderr: string, exitCode?: number): ProcessError | KnownError => {
+  if (stderr && stderrClassifier) {
+    const code = stderrClassifier(stderr, exitCode);
+    if (code) {
+      return new KnownError(code, stderr);
+    }
+  }
+  return new ProcessError(stderr || "Process exited without completing the turn", exitCode);
+};

@@ -28,7 +28,7 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
   // capture config. A pre-aborted signal surfaces on the first access
   // (iterate / text / cost / result), which is when spawn would happen.
   const translator = createTranslator();
-  const toolHandler = options.tools ? createToolHandler(options.tools) : undefined;
+  const toolHandler = options.toolHandler ? createToolHandler(options.toolHandler) : undefined;
   const costTracker = createCostTracker({
     maxCostUsd: options.maxCostUsd,
     onCostUpdate: options.onCostUpdate,

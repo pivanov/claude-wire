@@ -62,6 +62,33 @@ for await (const event of claude.stream("Explain closures in JS")) {
 }
 ```
 
+## Structured JSON Output
+
+Use `askJson()` to get typed, validated JSON responses:
+
+```ts
+import { claude } from "@pivanov/claude-wire";
+import { z } from "zod";
+
+const schema = z.object({
+  summary: z.string(),
+  score: z.number().min(0).max(100),
+});
+
+const { data } = await claude.askJson(
+  "Rate this code on a 0-100 scale and summarize it",
+  schema,
+  { model: "haiku" },
+);
+
+console.log(data.summary); // "Clean utility module..."
+console.log(data.score);   // 82
+```
+
+`askJson()` accepts any [Standard Schema](https://github.com/standard-schema/standard-schema) object (Zod, Valibot, ArkType) or a raw JSON Schema string. It returns `{ data: T, raw: TAskResult }`. Throws `JsonValidationError` if parsing or validation fails.
+
+Also available on sessions: `session.askJson(prompt, schema)`.
+
 ## Multi-Turn Sessions
 
 Keep a process alive across multiple questions:

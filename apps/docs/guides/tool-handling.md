@@ -8,7 +8,7 @@ Only permit specific tools:
 
 ```ts
 const result = await claude.ask("Analyze the codebase", {
-  tools: {
+  toolHandler: {
     allowed: ["Read", "Glob", "Grep"],
   },
 });
@@ -22,7 +22,7 @@ Block specific tools while allowing everything else:
 
 ```ts
 const result = await claude.ask("Refactor utils", {
-  tools: {
+  toolHandler: {
     blocked: ["Bash", "Write"],
   },
 });
@@ -34,7 +34,7 @@ Intercept each tool use with a callback:
 
 ```ts
 const result = await claude.ask("Fix the bug", {
-  tools: {
+  toolHandler: {
     onToolUse: async (tool) => {
       console.log(`Claude wants to use ${tool.toolName}`);
 
@@ -60,7 +60,7 @@ The handler receives a `TToolUseEvent` and must return one of:
 - `{ result: string, isError: true }` - same, but mark the result as an error so the model treats it as a tool-side failure and can react (retry, fall back, apologize) instead of treating it as success
 
 ```ts
-tools: {
+toolHandler: {
   onToolUse: async (tool) => {
     if (tool.toolName === "Bash" && isDestructive(tool.input)) {
       return { result: "Destructive shell commands are disabled in this sandbox.", isError: true };
@@ -76,7 +76,7 @@ If `onToolUse` throws, the stream rejects with the thrown error. Provide `onErro
 
 ```ts
 const result = await claude.ask("Fix the bug", {
-  tools: {
+  toolHandler: {
     onToolUse: async (tool) => {
       return await riskyPolicyCheck(tool);
     },

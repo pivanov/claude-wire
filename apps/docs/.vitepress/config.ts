@@ -37,6 +37,7 @@ export default defineConfig({
           { text: "Session", link: "/api/session" },
           { text: "Stream", link: "/api/stream" },
           { text: "Events", link: "/api/events" },
+          { text: "JSON (askJson)", link: "/api/json" },
           { text: "Errors", link: "/api/errors" },
         ],
       },

@@ -26,7 +26,7 @@ Track spending in real time with `onCostUpdate`:
 const result = await claude.ask("Complex task", {
   onCostUpdate: (cost) => {
     console.log(`$${cost.totalUsd.toFixed(4)} spent`);
-    console.log(`${cost.inputTokens} input, ${cost.outputTokens} output tokens`);
+    console.log(`${cost.tokens.input} input, ${cost.tokens.output} output tokens`);
   },
 });
 ```
@@ -37,13 +37,12 @@ The callback fires after each `turn_complete` event.
 
 ```ts
 type TCostSnapshot = {
-  totalUsd: number;       // assigned from wire protocol's cumulative total_cost_usd
-  inputTokens: number;    // assigned from wire protocol's cumulative token counts
-  outputTokens: number;   // assigned from wire protocol's cumulative token counts
+  totalUsd: number;                    // assigned from wire protocol's cumulative total_cost_usd
+  tokens: { input: number; output: number };  // assigned from wire protocol's cumulative token counts
 };
 ```
 
-The cost tracker uses assignment semantics, not accumulation. All values come from the wire protocol as running totals - the cost tracker stores the latest snapshot. `totalUsd` is assigned from Claude Code's `total_cost_usd`, and token counts are assigned from the cumulative values reported by the wire protocol.
+The cost tracker uses assignment semantics, not accumulation. All values come from the wire protocol as running totals -- the cost tracker stores the latest snapshot. `totalUsd` is assigned from Claude Code's `total_cost_usd`, and token counts are assigned from the cumulative values reported by the wire protocol.
 
 In sessions, cost survives process respawns via an internal offset mechanism.
 
@@ -85,6 +84,30 @@ const tracker = createCostTracker({
 
 tracker.update(0.05, 1000, 50);   // costUsd, inputTokens, outputTokens
 tracker.checkBudget();              // throws if over limit
-console.log(tracker.snapshot());    // { totalUsd, inputTokens, outputTokens }
+console.log(tracker.snapshot());    // { totalUsd, tokens: { input, output } }
 tracker.reset();                    // zero everything
 ```
+
+## Budget Projection
+
+The cost tracker exposes raw primitives for caller-side budget projection. No trend analysis or EMA -- the SDK provides the inputs and the caller owns the math.
+
+```ts
+const tracker = createCostTracker({ maxCostUsd: 5.00 });
+
+// After several turns...
+console.log(tracker.turnCount);       // number of turns processed
+console.log(tracker.averagePerTurn);  // totalUsd / turnCount
+
+// Project future spend based on average cost per turn
+const projection = tracker.project(10);  // 10 more turns
+console.log(projection.projectedUsd);    // totalUsd + (averagePerTurn * 10)
+```
+
+These are also available on the `ICostTracker` interface:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `turnCount` | `number` | Number of turns processed so far |
+| `averagePerTurn` | `number` | `totalUsd / turnCount` (0 if no turns) |
+| `project(remainingTurns)` | `(n: number) => { projectedUsd: number }` | Current spend plus projected spend for `n` more turns |

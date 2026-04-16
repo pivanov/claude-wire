@@ -20,12 +20,14 @@ console.log(result.costUsd);  // 0.0084
 ## Features
 
 - **Simple API** - `claude.ask()` returns a typed result, `claude.stream()` yields events
+- **Structured JSON** - `claude.askJson(prompt, schema)` with Standard Schema (Zod/Valibot/ArkType) validation
 - **Tool control** - allow, block, or intercept any tool at runtime
 - **Multi-turn sessions** - persistent process across multiple prompts
-- **Cost tracking** - per-request budgets with auto-abort
+- **Cost tracking** - per-request budgets with auto-abort and projection primitives
+- **Typed errors** - rate-limit, overload, context-length, retry-exhausted as `KnownError` codes
 - **Fully typed** - discriminated union events, full IntelliSense
-- **Resilient** - auto-respawn, transient error detection, AbortSignal
-- **Zero dependencies** - 25.6 kB gzipped
+- **Resilient** - auto-respawn with backoff, transient error detection, AbortSignal
+- **Zero dependencies** - ~29 kB gzipped
 
 ## Install
 
@@ -67,7 +69,7 @@ apps/examples/          interactive example runner
 
 ```bash
 bun install
-bun run test        # 192 tests
+bun run test        # 217 tests
 bun run typecheck
 bun run lint
 bun run docs:dev    # local docs server

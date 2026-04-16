@@ -1,3 +1,4 @@
+import { type IJsonResult, isStandardSchema, parseAndValidate, type TSchemaInput } from "./json.js";
 import type { IClaudeSession } from "./session.js";
 import { createSession } from "./session.js";
 import type { IClaudeStream } from "./stream.js";
@@ -7,6 +8,7 @@ import type { TAskResult } from "./types/results.js";
 
 export interface IClaudeClient {
   ask: (prompt: string, options?: IClaudeOptions) => Promise<TAskResult>;
+  askJson: <T>(prompt: string, schema: TSchemaInput<T>, options?: IClaudeOptions) => Promise<IJsonResult<T>>;
   stream: (prompt: string, options?: IClaudeOptions) => IClaudeStream;
   session: (options?: ISessionOptions) => IClaudeSession;
   create: (defaults: IClaudeOptions) => IClaudeClient;
@@ -15,8 +17,8 @@ export interface IClaudeClient {
 const mergeOptions = (defaults: IClaudeOptions, overrides?: IClaudeOptions): IClaudeOptions => {
   const merged: IClaudeOptions = { ...defaults, ...overrides };
 
-  if (overrides && "tools" in overrides) {
-    merged.tools = overrides.tools ? { ...defaults.tools, ...overrides.tools } : overrides.tools;
+  if (overrides && "toolHandler" in overrides) {
+    merged.toolHandler = overrides.toolHandler ? { ...defaults.toolHandler, ...overrides.toolHandler } : overrides.toolHandler;
   }
 
   if (overrides && "env" in overrides) {
@@ -31,6 +33,23 @@ export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
     const merged = mergeOptions(defaults, options);
     const stream = createStream(prompt, merged);
     return stream.result();
+  };
+
+  const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, options?: IClaudeOptions): Promise<IJsonResult<T>> => {
+    const merged = mergeOptions(defaults, options);
+    // Forward the raw JSON Schema string to the CLI via --json-schema when
+    // the caller passes a string. Standard Schema objects are validated
+    // SDK-side after the response arrives.
+    if (typeof schema === "string") {
+      merged.jsonSchema = schema;
+    } else if (isStandardSchema(schema)) {
+      // Extract JSON Schema representation if available for CLI-side
+      // constraint. Many Standard Schema libs expose this via toJsonSchema()
+      // but it's not part of the protocol. We validate SDK-side regardless.
+    }
+    const raw = await ask(prompt, merged);
+    const data = parseAndValidate(raw.text, schema);
+    return { data, raw };
   };
 
   const stream = (prompt: string, options?: IClaudeOptions): IClaudeStream => {
@@ -48,5 +67,5 @@ export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
     return createClient(merged);
   };
 
-  return { ask, stream, session, create };
+  return { ask, askJson, stream, session, create };
 };

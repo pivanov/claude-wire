@@ -94,7 +94,9 @@ try {
 ```
 
 **Properties:**
-- `code: TKnownErrorCode` - one of: `"not-authenticated"`, `"binary-not-found"`, `"permission-denied"`, `"retry-exhausted"`
+- `code: TKnownErrorCode` - one of: `"not-authenticated"`, `"binary-not-found"`, `"permission-denied"`, `"retry-exhausted"`, `"rate-limit"`, `"overloaded"`, `"context-length-exceeded"`, `"invalid-json-schema"`, `"mcp-error"`
+
+The last five codes are auto-classified from stderr by `classifyStderr()` -- when a `ProcessError` is about to be thrown and stderr matches a known pattern, it is promoted to a `KnownError` with the appropriate code instead.
 
 The `retry-exhausted` code is thrown by `session.ask()` when the respawn budget (`LIMITS.maxRespawnAttempts`, currently 3) has been used up by consecutive transient failures. The session is marked closed and any further `ask()` call rejects with `ClaudeError("Session is closed")`.
 
@@ -109,6 +111,56 @@ try {
   }
 }
 ```
+
+## `classifyStderr(stderr, exitCode?)`
+
+Attempts to classify an opaque stderr string into a typed `TKnownErrorCode`. Returns `undefined` when no pattern matches.
+
+```ts
+import { classifyStderr } from "@pivanov/claude-wire";
+
+const code = classifyStderr("Error: rate limit exceeded (429)");
+console.log(code); // "rate-limit"
+
+const unknown = classifyStderr("something unexpected");
+console.log(unknown); // undefined
+```
+
+Recognized patterns:
+
+| Code | Matches |
+|------|---------|
+| `rate-limit` | `rate limit`, `429`, `too many requests` |
+| `overloaded` | `overloaded`, `529`, `temporarily unavailable` |
+| `context-length-exceeded` | `context length`, `context window`, `too long`, `maximum.*tokens` |
+| `invalid-json-schema` | `invalid.*json schema`, `schema.*invalid`, `json.*schema.*error` |
+| `mcp-error` | `mcp.*error`, `mcp.*fail`, `mcp.*server` |
+| `not-authenticated` | `not authenticated`, `authentication`, `unauthorized`, `401` |
+| `permission-denied` | `permission denied`, `forbidden`, `403` |
+| `binary-not-found` | `binary.*not found`, `command not found`, `ENOENT.*claude` |
+
+This function is wired into the error factory at module load -- `ProcessError` instances are automatically promoted to `KnownError` when stderr matches. You typically don't need to call it directly unless you're doing custom stderr analysis.
+
+## `JsonValidationError`
+
+Thrown by `askJson()` when the response cannot be parsed as valid JSON or fails schema validation.
+
+```ts
+import { JsonValidationError } from "@pivanov/claude-wire";
+
+try {
+  await claude.askJson("...", schema);
+} catch (error) {
+  if (error instanceof JsonValidationError) {
+    console.error("Raw text:", error.rawText);
+    console.error("Issues:", error.issues);
+  }
+}
+```
+
+**Properties:**
+- `rawText: string` -- the raw text that failed to parse or validate
+- `issues: ReadonlyArray<{ message?: string; path?: ReadonlyArray<string | number> }>` -- validation issues from the schema library
 
 ## `isTransientError(error)`
 

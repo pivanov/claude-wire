@@ -67,7 +67,7 @@ const translateContentBlock = (block: TClaudeContent): TRelayEvent | undefined =
         type: "tool_use",
         toolUseId: block.id,
         toolName: block.name,
-        input: typeof block.input === "string" ? block.input : JSON.stringify(block.input ?? {}),
+        input: block.input ?? {},
       };
     }
     case "tool_result": {

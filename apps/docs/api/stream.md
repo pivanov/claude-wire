@@ -14,7 +14,7 @@ for await (const event of claude.stream("Explain generics")) {
       console.log("[think]", event.content);
       break;
     case "tool_use":
-      console.log(`[tool] ${event.toolName}(${event.input})`);
+      console.log(`[tool] ${event.toolName}(${JSON.stringify(event.input)})`);
       break;
     case "tool_result":
       console.log(`[result] ${event.output}`);
@@ -47,7 +47,7 @@ Consumes the stream and returns the final cost snapshot.
 
 ```ts
 const cost = await claude.stream("Hello").cost();
-console.log(cost.totalUsd, cost.inputTokens, cost.outputTokens);
+console.log(cost.totalUsd, cost.tokens.input, cost.tokens.output);
 ```
 
 ### `.result()`

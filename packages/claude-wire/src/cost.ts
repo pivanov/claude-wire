@@ -4,6 +4,10 @@ import { assertPositiveNumber } from "./validation.js";
 import type { TWarn } from "./warnings.js";
 import { createWarn } from "./warnings.js";
 
+export interface ICostProjection {
+  projectedUsd: number;
+}
+
 export interface ICostTracker {
   // All values are REPLACEMENTS, not deltas. The wire protocol's total_cost_usd
   // is already cumulative. Session.ts handles offsets when respawning processes.
@@ -11,6 +15,11 @@ export interface ICostTracker {
   snapshot: () => TCostSnapshot;
   checkBudget: () => void;
   reset: () => void;
+  // Raw primitives for caller-side projection. No EMA, no trend analysis --
+  // the SDK provides the inputs and the caller owns the math.
+  turnCount: number;
+  averagePerTurn: number;
+  project: (remainingTurns: number) => ICostProjection;
 }
 
 export interface ICostTrackerOptions {
@@ -24,19 +33,20 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
   const warn = createWarn(options.onWarning);
 
   let totalUsd = 0;
-  let inputTokens = 0;
-  let outputTokens = 0;
+  let input = 0;
+  let output = 0;
+  let turns = 0;
 
   const snapshot = (): TCostSnapshot => ({
     totalUsd,
-    inputTokens,
-    outputTokens,
+    tokens: { input, output },
   });
 
   const update = (totalCostUsd: number, totalInputToks: number, totalOutputToks: number) => {
     totalUsd = totalCostUsd;
-    inputTokens = totalInputToks;
-    outputTokens = totalOutputToks;
+    input = totalInputToks;
+    output = totalOutputToks;
+    turns++;
 
     if (options.onCostUpdate) {
       try {
@@ -55,9 +65,27 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
 
   const reset = () => {
     totalUsd = 0;
-    inputTokens = 0;
-    outputTokens = 0;
+    input = 0;
+    output = 0;
+    turns = 0;
   };
 
-  return { update, snapshot, checkBudget, reset };
+  const project = (remainingTurns: number): ICostProjection => {
+    const avg = turns > 0 ? totalUsd / turns : 0;
+    return { projectedUsd: totalUsd + avg * remainingTurns };
+  };
+
+  return {
+    update,
+    snapshot,
+    checkBudget,
+    reset,
+    get turnCount() {
+      return turns;
+    },
+    get averagePerTurn() {
+      return turns > 0 ? totalUsd / turns : 0;
+    },
+    project,
+  };
 };

@@ -12,7 +12,11 @@ export type TToolUseEvent = {
   type: "tool_use";
   toolUseId: string;
   toolName: string;
-  input: string;
+  // Structured tool input as parsed from the protocol. Previously
+  // pre-serialized to a string; now passed through as-is so consumers
+  // don't have to re-parse. Use JSON.stringify(event.input) if you need
+  // the string form.
+  input: unknown;
 };
 
 export type TToolResultEvent = {

@@ -60,10 +60,10 @@ describe("createStream", () => {
 
     // Fixture total_cost_usd = 0.018
     expect(cost.totalUsd).toBe(0.018);
-    // inputTokens = 500 + 3000 (cacheRead) = 3500
-    expect(cost.inputTokens).toBe(3500);
-    // outputTokens = 120
-    expect(cost.outputTokens).toBe(120);
+    // tokens.input = 500 + 3000 (cacheRead) = 3500
+    expect(cost.tokens.input).toBe(3500);
+    // tokens.output = 120
+    expect(cost.tokens.output).toBe(120);
   });
 
   test("result() returns full TAskResult", async () => {
@@ -117,7 +117,7 @@ describe("createStream", () => {
     const createStream = await loadCreateStream();
     const stream = createStream("fix the bug", {
       maxBudgetUsd: 1,
-      tools: {
+      toolHandler: {
         allowed: ["Read", "Edit"],
       },
     });
@@ -155,7 +155,7 @@ describe("createStream", () => {
     const createStream = await loadCreateStream();
     const stream = createStream("fix the bug", {
       maxBudgetUsd: 1,
-      tools: {
+      toolHandler: {
         blocked: ["Edit"],
         allowed: ["Read"],
       },

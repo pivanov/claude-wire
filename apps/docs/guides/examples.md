@@ -27,7 +27,7 @@ This opens an interactive menu where you pick which example to run. After each e
 | 01 | One-shot ask | `claude.ask()` with typed result, cost, tokens, duration |
 | 02 | Event streaming | `claude.stream()` with `for await` loop, event timeline |
 | 03 | Multi-turn session | `claude.session()` with two turns, cumulative cost |
-| 04 | Tool control | `tools.allowed`, `tools.blocked`, custom `onToolUse` handler |
+| 04 | Tool control | `toolHandler.allowed`, `toolHandler.blocked`, custom `onToolUse` handler |
 | 05 | Cost budget | `maxCostUsd` limit with `onCostUpdate` callback |
 | 06 | Abort with timeout | `AbortSignal.timeout()` cancellation |
 | 07 | System prompt | Custom `systemPrompt` to change Claude's behavior |

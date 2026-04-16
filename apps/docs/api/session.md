@@ -48,6 +48,29 @@ async function handleRequest(req) {
 | `onRetry` | `(attempt: number, error: unknown) => void` | Per-ask retry observer. Fires alongside the session-level `onRetry` when both are set. |
 | `signal` | `AbortSignal` | Per-ask abort. Aborts this ask only (session stays alive). Composes with the session-level signal -- either firing aborts the ask. |
 
+## `session.askJson(prompt, schema, options?)`
+
+Same as `claude.askJson()` but within a session. The response is parsed and validated against the schema, and the session's conversation context is preserved.
+
+```ts
+import { z } from "zod";
+
+const session = claude.session({ model: "sonnet" });
+
+const { data } = await session.askJson(
+  "What are the top 3 files by size? Return JSON: { files: { name: string, bytes: number }[] }",
+  z.object({ files: z.array(z.object({ name: z.string(), bytes: z.number() })) }),
+);
+
+console.log(data.files);
+
+await session.close();
+```
+
+Accepts the same schema inputs as `claude.askJson()` -- Standard Schema objects or raw JSON Schema strings. Throws `JsonValidationError` on parse/validation failure.
+
+**Returns:** `Promise<IJsonResult<T>>`
+
 ## `session.close()`
 
 Kill the underlying process and release resources. Always call this when done.

@@ -2,6 +2,7 @@ import { withTimeout } from "./async.js";
 import { LIMITS, MAX_BACKOFF_INDEX, RESPAWN_BACKOFF_MS, TIMEOUTS } from "./constants.js";
 import { createCostTracker } from "./cost.js";
 import { AbortError, BudgetExceededError, ClaudeError, isTransientError, KnownError, processExitedEarly, TimeoutError } from "./errors.js";
+import { type IJsonResult, parseAndValidate, type TSchemaInput } from "./json.js";
 import { createTranslator } from "./parser/translator.js";
 import { applyTurnComplete, buildResult, startPipeline } from "./pipeline.js";
 import type { IClaudeProcess } from "./process.js";
@@ -15,6 +16,7 @@ import { writer } from "./writer.js";
 
 export interface IClaudeSession extends AsyncDisposable {
   ask: (prompt: string, options?: IAskOptions) => Promise<TAskResult>;
+  askJson: <T>(prompt: string, schema: import("./json.js").TSchemaInput<T>, options?: IAskOptions) => Promise<import("./json.js").IJsonResult<T>>;
   close: () => Promise<void>;
   sessionId: string | undefined;
 }
@@ -108,14 +110,14 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   let currentSessionId: string | undefined;
   let consecutiveCrashes = 0;
   let turnCount = 0;
-  let costOffsets = { totalUsd: 0, inputTokens: 0, outputTokens: 0 };
+  let costOffsets = { totalUsd: 0, tokens: { input: 0, output: 0 } };
   const translator = createTranslator();
   const costTracker = createCostTracker({
     maxCostUsd: options.maxCostUsd,
     onCostUpdate: options.onCostUpdate,
     onWarning: options.onWarning,
   });
-  const toolHandler = options.tools ? createToolHandler(options.tools) : undefined;
+  const toolHandler = options.toolHandler ? createToolHandler(options.toolHandler) : undefined;
   let inFlight: Promise<TAskResult> | undefined;
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -340,8 +342,15 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     cleanupProcess();
   };
 
+  const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, askOpts?: IAskOptions): Promise<IJsonResult<T>> => {
+    const raw = await ask(prompt, askOpts);
+    const data = parseAndValidate(raw.text, schema);
+    return { data, raw };
+  };
+
   return {
     ask,
+    askJson,
     close,
     get sessionId() {
       return currentSessionId;

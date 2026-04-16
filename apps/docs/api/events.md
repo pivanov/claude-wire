@@ -44,11 +44,11 @@ Claude wants to use a tool. If you have a tool handler configured, it will be ca
   type: "tool_use",
   toolUseId: "toolu_abc123",
   toolName: "Read",
-  input: "{\"file_path\":\"main.ts\"}"
+  input: { file_path: "main.ts" }
 }
 ```
 
-The `input` field is always a JSON string.
+The `input` field is `unknown` -- it is the parsed JSON object from the wire protocol, passed through as-is. Use `JSON.stringify(event.input)` if you need the string form.
 
 ## `TToolResultEvent`
 

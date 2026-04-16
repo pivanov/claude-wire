@@ -26,7 +26,7 @@ export interface IClaudeOptions {
   appendSystemPrompt?: string;
   allowedTools?: TToolName[];
   disallowedTools?: TToolName[];
-  tools?: IToolHandler;
+  toolHandler?: IToolHandler;
   /**
    * SDK-side budget limit, evaluated after each turn. Throws `BudgetExceededError`
    * and kills the process when `total_cost_usd` exceeds this value. `0` means

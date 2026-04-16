@@ -62,11 +62,11 @@ export const dispatchToolDecision = async (
 // wants to carry forward what previous processes already spent -- stream
 // has no such concept and passes it undefined.
 export const applyTurnComplete = (event: TTurnCompleteEvent, costTracker: ICostTracker, offsets?: TCostSnapshot): void => {
-  const base = offsets ?? { totalUsd: 0, inputTokens: 0, outputTokens: 0 };
+  const base = offsets ?? { totalUsd: 0, tokens: { input: 0, output: 0 } };
   costTracker.update(
     base.totalUsd + (event.costUsd ?? 0),
-    base.inputTokens + (event.inputTokens ?? 0),
-    base.outputTokens + (event.outputTokens ?? 0),
+    base.tokens.input + (event.inputTokens ?? 0),
+    base.tokens.output + (event.outputTokens ?? 0),
   );
   costTracker.checkBudget();
 };
@@ -85,7 +85,7 @@ export const buildResult = (events: TRelayEvent[], costTracker: ICostTracker, se
   return {
     text: extractText(events),
     costUsd: snap.totalUsd,
-    tokens: { input: snap.inputTokens, output: snap.outputTokens },
+    tokens: snap.tokens,
     duration: tc?.durationMs ?? 0,
     sessionId,
     events,
