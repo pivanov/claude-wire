@@ -24,12 +24,13 @@ export const run = async () => {
   const r = await claude.ask(PROMPT, {
     model: "haiku",
     cwd: process.cwd(),
-    tools: {
+    toolHandler: {
       allowed: ["Read", "Glob"],
       blocked: ["Bash", "Write", "Edit"],
       onToolUse: async (tool) => {
         spinner.stop();
-        console.log(`  ${yellow("\u2192")} ${cyan(tool.toolName)} ${dim(tool.input.slice(0, 60))}`);
+        const preview = typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input);
+        console.log(`  ${yellow("\u2192")} ${cyan(tool.toolName)} ${dim(preview.slice(0, 60))}`);
         spinner.start("Waiting for Claude...");
         return "approve";
       },
@@ -41,7 +42,7 @@ export const run = async () => {
   gap();
   stats(r);
   divider();
-  info("Code: claude.ask(prompt, { tools: { allowed, blocked, onToolUse } })");
+  info("Code: claude.ask(prompt, { toolHandler: { allowed, blocked, onToolUse } })");
 };
 
 if (import.meta.main) {

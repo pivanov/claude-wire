@@ -102,17 +102,13 @@ export const errorMessage = (error: unknown): string => {
 // duplicated verbatim, which drifted at least once. Prefix stderr when
 // available because CLI error output is the most actionable signal.
 // Auto-promotes to KnownError when stderr matches a classifiable pattern.
-// The classifier is injected to avoid a circular import (stderr.ts imports
-// types from this file). Wire it at boot via `setStderrClassifier`.
-let stderrClassifier: ((stderr: string, exitCode?: number) => TKnownErrorCode | undefined) | undefined;
-
-export const setStderrClassifier = (fn: typeof stderrClassifier): void => {
-  stderrClassifier = fn;
-};
+// stderr.ts only has a type-only import from this file, so the direct
+// runtime import below is NOT a circular dependency at runtime.
+import { classifyStderr } from "./stderr.js";
 
 export const processExitedEarly = (stderr: string, exitCode?: number): ProcessError | KnownError => {
-  if (stderr && stderrClassifier) {
-    const code = stderrClassifier(stderr, exitCode);
+  if (stderr) {
+    const code = classifyStderr(stderr, exitCode);
     if (code) {
       return new KnownError(code, stderr);
     }

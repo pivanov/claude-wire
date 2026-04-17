@@ -4,7 +4,16 @@ import type { TRelayEvent } from "./events.js";
 // Previously TCostSnapshot used { inputTokens, outputTokens } while
 // TAskResult used { tokens: { input, output } } -- two names for the
 // same concept. Consolidated to the shorter form everywhere.
-export type TTokens = { input: number; output: number };
+//
+// `input` is the total of all input tokens (base + cache read + cache creation).
+// `cacheRead` and `cacheCreation` break out the cached portions so callers
+// can verify prompt caching is working and compute accurate billing.
+export type TTokens = {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheCreation?: number;
+};
 
 export type TCostSnapshot = {
   totalUsd: number;
@@ -15,7 +24,10 @@ export type TAskResult = {
   text: string;
   costUsd: number;
   tokens: TTokens;
-  duration: number;
+  // Undefined when the CLI closed stdout without sending a `turn_complete`
+  // (aborted/partial runs). Previously coerced to 0, which looked like a
+  // legitimately-measured 0ms turn.
+  duration: number | undefined;
   sessionId?: string;
   events: TRelayEvent[];
 };

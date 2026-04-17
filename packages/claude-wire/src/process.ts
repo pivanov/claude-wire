@@ -229,14 +229,20 @@ export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
     // a signal that fires BEFORE stdout emits anything leaves the reader
     // loop to eventually notice -- the child keeps running in the meantime.
     // Register FIRST, then re-check `aborted`: closes the gap where abort
-    // could fire between the check and listener attach. `once: true` lets
-    // the listener be GC'd after firing.
+    // could fire between the check and listener attach. On exit (normal
+    // or killed), remove the listener so reused long-lived AbortControllers
+    // don't accumulate dead entries across many spawns. `once: true` alone
+    // doesn't cover the no-abort path.
     if (options.signal) {
+      const signal = options.signal;
       const onAbort = () => {
         safeKill(rawProc);
       };
-      options.signal.addEventListener("abort", onAbort, { once: true });
-      if (options.signal.aborted) {
+      signal.addEventListener("abort", onAbort, { once: true });
+      rawProc.exited.finally(() => {
+        signal.removeEventListener("abort", onAbort);
+      });
+      if (signal.aborted) {
         safeKill(rawProc);
       }
     }

@@ -10,7 +10,7 @@ const makeReader = (lines: string[]): ReadableStreamDefaultReader<Uint8Array> =>
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       for (const line of lines) {
-        controller.enqueue(encoder.encode(line + "\n"));
+        controller.enqueue(encoder.encode(`${line}\n`));
       }
       controller.close();
     },
@@ -23,7 +23,7 @@ const makeStdout = (lines: string[]): ReadableStream<Uint8Array> => {
   return new ReadableStream<Uint8Array>({
     start(controller) {
       for (const line of lines) {
-        controller.enqueue(encoder.encode(line + "\n"));
+        controller.enqueue(encoder.encode(`${line}\n`));
       }
       controller.close();
     },
@@ -168,7 +168,6 @@ describe("readNdjsonEvents shape", () => {
     };
     const toolHandler = { decide: async () => "approve" as const };
     const events = await drainEvents(
-      // biome-ignore lint/suspicious/noExplicitAny: test-only cast for minimal process mock
       readNdjsonEvents({
         reader: stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>,
         translator: createTranslator(),

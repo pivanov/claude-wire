@@ -5,12 +5,20 @@ import { blockFingerprint, extractContent, parseDoubleEncoded } from "./content.
 const extractTokens = (modelUsage?: Record<string, TModelUsageEntry>) => {
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
+  let cacheReadTokens: number | undefined;
+  let cacheCreationTokens: number | undefined;
   let contextWindow: number | undefined;
 
   if (modelUsage) {
     for (const entry of Object.values(modelUsage)) {
       inputTokens = (inputTokens ?? 0) + entry.inputTokens + (entry.cacheReadInputTokens ?? 0) + (entry.cacheCreationInputTokens ?? 0);
       outputTokens = (outputTokens ?? 0) + entry.outputTokens;
+      if (entry.cacheReadInputTokens !== undefined) {
+        cacheReadTokens = (cacheReadTokens ?? 0) + entry.cacheReadInputTokens;
+      }
+      if (entry.cacheCreationInputTokens !== undefined) {
+        cacheCreationTokens = (cacheCreationTokens ?? 0) + entry.cacheCreationInputTokens;
+      }
       // Multi-model turns (e.g. sub-agent fan-out) report distinct windows
       // per model. Take max so consumers see the widest context available,
       // not whichever model happened to iterate last.
@@ -20,17 +28,19 @@ const extractTokens = (modelUsage?: Record<string, TModelUsageEntry>) => {
     }
   }
 
-  return { inputTokens, outputTokens, contextWindow };
+  return { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, contextWindow };
 };
 
 const buildTurnComplete = (raw: TClaudeEvent): TTurnCompleteEvent => {
-  const { inputTokens, outputTokens, contextWindow } = extractTokens(raw.modelUsage);
+  const { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, contextWindow } = extractTokens(raw.modelUsage);
   return {
     type: "turn_complete",
     sessionId: raw.session_id,
     costUsd: raw.total_cost_usd,
     inputTokens,
     outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
     contextWindow,
     durationMs: raw.duration_ms,
   };

@@ -24,6 +24,9 @@ interface IPipeline {
 // the other swallows exits silently" class of bug.
 export const startPipeline = (options: ISpawnOptions): IPipeline => {
   const proc = spawnClaude(options);
+  // Cast is load-bearing: Node's stream/web ReadableStreamDefaultReader is
+  // structurally a superset of Bun's (it adds a `readMany` method), so
+  // without this the dual-runtime abstraction in runtime.ts fails to unify.
   const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
   const stderr = drainStderr(proc);
   return { proc, reader, stderr };
@@ -63,10 +66,15 @@ export const dispatchToolDecision = async (
 // has no such concept and passes it undefined.
 export const applyTurnComplete = (event: TTurnCompleteEvent, costTracker: ICostTracker, offsets?: TCostSnapshot): void => {
   const base = offsets ?? { totalUsd: 0, tokens: { input: 0, output: 0 } };
+  const cacheRead = event.cacheReadTokens !== undefined ? (base.tokens.cacheRead ?? 0) + event.cacheReadTokens : base.tokens.cacheRead;
+  const cacheCreation =
+    event.cacheCreationTokens !== undefined ? (base.tokens.cacheCreation ?? 0) + event.cacheCreationTokens : base.tokens.cacheCreation;
   costTracker.update(
     base.totalUsd + (event.costUsd ?? 0),
     base.tokens.input + (event.inputTokens ?? 0),
     base.tokens.output + (event.outputTokens ?? 0),
+    cacheRead,
+    cacheCreation,
   );
   costTracker.checkBudget();
 };
@@ -86,7 +94,7 @@ export const buildResult = (events: TRelayEvent[], costTracker: ICostTracker, se
     text: extractText(events),
     costUsd: snap.totalUsd,
     tokens: snap.tokens,
-    duration: tc?.durationMs ?? 0,
+    duration: tc?.durationMs,
     sessionId,
     events,
   };

@@ -2,6 +2,10 @@
 
 A session keeps a single Claude Code process alive across multiple `ask()` calls, preserving conversation context.
 
+::: warning One-shot classifiers don't belong in a session
+Sessions keep the full conversation in context -- every turn sees all prior turns. For stateless one-shot work (classifiers, extractors, routers), use `claude.askJson()` instead. See [Stateless Classifier Pattern](/guides/classifier).
+:::
+
 ## Creating a Session
 
 ```ts

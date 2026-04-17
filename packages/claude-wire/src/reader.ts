@@ -152,7 +152,7 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
       buffer = lines.pop() ?? "";
 
       for (const line of lines) {
-        const raw = parseLine(line);
+        const raw = parseLine(line, opts.onWarning);
         if (!raw) {
           continue;
         }
@@ -165,7 +165,7 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
     }
 
     if (buffer.trim()) {
-      const raw = parseLine(buffer);
+      const raw = parseLine(buffer, opts.onWarning);
       if (raw) {
         yield* processRaw(raw);
       }

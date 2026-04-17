@@ -37,12 +37,19 @@ The callback fires after each `turn_complete` event.
 
 ```ts
 type TCostSnapshot = {
-  totalUsd: number;                    // assigned from wire protocol's cumulative total_cost_usd
-  tokens: { input: number; output: number };  // assigned from wire protocol's cumulative token counts
+  totalUsd: number;
+  tokens: {
+    input: number;            // total input tokens (base + cache read + cache creation)
+    output: number;
+    cacheRead?: number;       // tokens read from prompt cache (~10% billing rate)
+    cacheCreation?: number;   // tokens written to prompt cache (~125% billing rate)
+  };
 };
 ```
 
 The cost tracker uses assignment semantics, not accumulation. All values come from the wire protocol as running totals -- the cost tracker stores the latest snapshot. `totalUsd` is assigned from Claude Code's `total_cost_usd`, and token counts are assigned from the cumulative values reported by the wire protocol.
+
+`cacheRead` and `cacheCreation` are present when the CLI reports prompt cache data. Use `cacheRead` to verify that prompt caching is working -- if it's non-zero, your system prompt is being served from cache.
 
 In sessions, cost survives process respawns via an internal offset mechanism.
 

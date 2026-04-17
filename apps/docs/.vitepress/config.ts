@@ -44,6 +44,7 @@ export default defineConfig({
       {
         text: "Guides",
         items: [
+          { text: "Stateless Classifier", link: "/guides/classifier" },
           { text: "Tool Handling", link: "/guides/tool-handling" },
           { text: "Cost Tracking", link: "/guides/cost-tracking" },
           { text: "Examples", link: "/guides/examples" },

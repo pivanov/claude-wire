@@ -1,4 +1,4 @@
-import { type IJsonResult, isStandardSchema, parseAndValidate, type TSchemaInput } from "./json.js";
+import { type IJsonResult, parseAndValidate, type TSchemaInput } from "./json.js";
 import type { IClaudeSession } from "./session.js";
 import { createSession } from "./session.js";
 import type { IClaudeStream } from "./stream.js";
@@ -37,18 +37,16 @@ export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, options?: IClaudeOptions): Promise<IJsonResult<T>> => {
     const merged = mergeOptions(defaults, options);
-    // Forward the raw JSON Schema string to the CLI via --json-schema when
-    // the caller passes a string. Standard Schema objects are validated
-    // SDK-side after the response arrives.
+    // A raw JSON Schema string is forwarded to the CLI via --json-schema so
+    // the model is constrained to produce valid JSON. Standard Schema
+    // objects are validated SDK-side only -- most libraries don't expose a
+    // JSON Schema representation at runtime, and our validator runs either
+    // way after the response arrives.
     if (typeof schema === "string") {
       merged.jsonSchema = schema;
-    } else if (isStandardSchema(schema)) {
-      // Extract JSON Schema representation if available for CLI-side
-      // constraint. Many Standard Schema libs expose this via toJsonSchema()
-      // but it's not part of the protocol. We validate SDK-side regardless.
     }
     const raw = await ask(prompt, merged);
-    const data = parseAndValidate(raw.text, schema);
+    const data = await parseAndValidate(raw.text, schema);
     return { data, raw };
   };
 

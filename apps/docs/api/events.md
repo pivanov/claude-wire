@@ -85,14 +85,16 @@ Emitted at the end of each turn with cost, token, and timing data.
   type: "turn_complete",
   sessionId: "sess-abc123",
   costUsd: 0.018,
-  inputTokens: 3500,
+  inputTokens: 3500,          // total input (base + cache read + cache creation)
   outputTokens: 120,
+  cacheReadTokens: 3000,      // tokens read from prompt cache (~10% billing rate)
+  cacheCreationTokens: 0,     // tokens written to prompt cache (~125% billing rate)
   contextWindow: 200000,
   durationMs: 8500
 }
 ```
 
-All fields except `type` are optional - they may be absent on legacy `system/result` events.
+All fields except `type` are optional -- they may be absent on legacy `system/result` events or when the CLI omits `modelUsage`.
 
 ## `TErrorEvent`
 

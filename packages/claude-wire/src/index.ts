@@ -50,13 +50,7 @@ export type {
 export type { IAskOptions, IClaudeOptions, ISessionOptions, IToolHandler } from "./types/options.js";
 export type { TClaudeContent, TClaudeContentType, TClaudeEvent, TClaudeEventType, TClaudeMessage, TModelUsageEntry } from "./types/protocol.js";
 export type { TAskResult, TCostSnapshot, TTokens } from "./types/results.js";
+export type { TWarn } from "./warnings.js";
 export { writer } from "./writer.js";
-
-// Wire the stderr classifier into the error factory at module load so
-// processExitedEarly can auto-promote ProcessError -> KnownError.
-import { setStderrClassifier } from "./errors.js";
-import { classifyStderr as _classifyStderr } from "./stderr.js";
-
-setStderrClassifier(_classifyStderr);
 
 export const claude = createClient();

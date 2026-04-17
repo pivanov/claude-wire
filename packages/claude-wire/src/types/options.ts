@@ -1,5 +1,6 @@
 import type { TToolDecision } from "../tools/handler.js";
 import type { TBuiltInToolName } from "../tools/registry.js";
+import type { TWarn } from "../warnings.js";
 import type { TToolUseEvent } from "./events.js";
 import type { TCostSnapshot } from "./results.js";
 
@@ -68,12 +69,11 @@ export interface IClaudeOptions {
    * silence them with `() => {}`. When omitted, warnings go to `console.warn`
    * prefixed with `[claude-wire]`.
    */
-  onWarning?: (message: string, cause?: unknown) => void;
+  onWarning?: TWarn;
 }
 
-// createSession takes the same options as createClient/createStream. Kept
-// as a named alias so the session API has a documentable option type
-// without duplicating the field list.
+// Session-specific superset of IClaudeOptions: same spawn/config surface
+// plus observability hooks that only make sense for a multi-turn flow.
 export interface ISessionOptions extends IClaudeOptions {
   /**
    * Fires each time a transient failure triggers a respawn inside a single

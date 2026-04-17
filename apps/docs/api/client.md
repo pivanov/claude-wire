@@ -19,7 +19,12 @@ const result = await claude.ask("Fix the bug in main.ts", {
 type TAskResult = {
   text: string;                        // concatenated text output
   costUsd: number;                     // total cost in USD
-  tokens: { input: number; output: number };
+  tokens: {
+    input: number;                     // total input (base + cache read + cache creation)
+    output: number;
+    cacheRead?: number;                // tokens read from prompt cache
+    cacheCreation?: number;            // tokens written to prompt cache
+  };
   duration: number;                    // ms
   sessionId?: string;
   events: TRelayEvent[];               // all events

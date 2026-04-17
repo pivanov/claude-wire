@@ -20,7 +20,9 @@ describe("ALIAS_PATTERN", () => {
     expect(match?.[1]).toBe(".bare");
   });
 
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: test-only shell syntax
   test("matches export using ${HOME}", () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: test-only shell syntax
     const line = 'export CLAUDE_CONFIG_DIR="${HOME}/configs/a"';
     const match = line.match(ALIAS_PATTERN);
     expect(match?.[1]).toBe("configs/a");
@@ -66,7 +68,7 @@ describe("ALIAS_PATTERN", () => {
   });
 
   test("matches active line in a multi-line file containing comments", () => {
-    const content = ['# old config', '# export CLAUDE_CONFIG_DIR="$HOME/.old"', 'export CLAUDE_CONFIG_DIR="$HOME/.new"'].join("\n");
+    const content = ["# old config", '# export CLAUDE_CONFIG_DIR="$HOME/.old"', 'export CLAUDE_CONFIG_DIR="$HOME/.new"'].join("\n");
     const match = content.match(ALIAS_PATTERN);
     expect(match?.[1]).toBe(".new");
   });

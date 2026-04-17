@@ -45,7 +45,7 @@ describe("createCostTracker", () => {
   });
 
   test("checkBudget does not throw within budget", () => {
-    const tracker = createCostTracker({ maxCostUsd: 0.10 });
+    const tracker = createCostTracker({ maxCostUsd: 0.1 });
     tracker.update(0.05, 3000, 100);
 
     expect(() => tracker.checkBudget()).not.toThrow();
@@ -81,28 +81,75 @@ describe("createCostTracker", () => {
 
   test("averagePerTurn is totalUsd / turnCount", () => {
     const tracker = createCostTracker();
-    tracker.update(0.10, 100, 10);
-    tracker.update(0.30, 200, 20);
+    tracker.update(0.1, 100, 10);
+    tracker.update(0.3, 200, 20);
     expect(tracker.averagePerTurn).toBeCloseTo(0.15);
   });
 
   test("project estimates remaining spend", () => {
     const tracker = createCostTracker();
-    tracker.update(0.10, 100, 10);
-    tracker.update(0.20, 200, 20);
+    tracker.update(0.1, 100, 10);
+    tracker.update(0.2, 200, 20);
     // avg = 0.10, project 5 more turns = 0.20 + 0.10 * 5 = 0.70
     const p = tracker.project(5);
-    expect(p.projectedUsd).toBeCloseTo(0.70);
+    expect(p.projectedUsd).toBeCloseTo(0.7);
   });
 
   test("project returns current total when 0 remaining turns", () => {
     const tracker = createCostTracker();
-    tracker.update(0.50, 100, 10);
-    expect(tracker.project(0).projectedUsd).toBe(0.50);
+    tracker.update(0.5, 100, 10);
+    expect(tracker.project(0).projectedUsd).toBe(0.5);
   });
 
   test("project returns 0 when no turns have happened", () => {
     const tracker = createCostTracker();
     expect(tracker.project(10).projectedUsd).toBe(0);
+  });
+
+  test("cache tokens are undefined by default", () => {
+    const tracker = createCostTracker();
+    const snap = tracker.snapshot();
+    expect(snap.tokens.cacheRead).toBeUndefined();
+    expect(snap.tokens.cacheCreation).toBeUndefined();
+  });
+
+  test("tracks cache read and creation tokens", () => {
+    const tracker = createCostTracker();
+    tracker.update(0.01, 3500, 120, 3000, 200);
+    const snap = tracker.snapshot();
+    expect(snap.tokens.input).toBe(3500);
+    expect(snap.tokens.cacheRead).toBe(3000);
+    expect(snap.tokens.cacheCreation).toBe(200);
+  });
+
+  test("preserves cache tokens when subsequent update omits them", () => {
+    const tracker = createCostTracker();
+    tracker.update(0.01, 3500, 120, 3000, 200);
+    tracker.update(0.02, 7000, 240);
+    const snap = tracker.snapshot();
+    expect(snap.tokens.cacheRead).toBe(3000);
+    expect(snap.tokens.cacheCreation).toBe(200);
+  });
+
+  test("reset clears cache tokens", () => {
+    const tracker = createCostTracker();
+    tracker.update(0.01, 3500, 120, 3000, 200);
+    tracker.reset();
+    const snap = tracker.snapshot();
+    expect(snap.tokens.cacheRead).toBeUndefined();
+    expect(snap.tokens.cacheCreation).toBeUndefined();
+  });
+
+  test("onCostUpdate receives cache tokens", () => {
+    const snapshots: { cacheRead?: number; cacheCreation?: number }[] = [];
+    const tracker = createCostTracker({
+      onCostUpdate: (cost) =>
+        snapshots.push({
+          cacheRead: cost.tokens.cacheRead,
+          cacheCreation: cost.tokens.cacheCreation,
+        }),
+    });
+    tracker.update(0.01, 3500, 120, 3000, 200);
+    expect(snapshots).toEqual([{ cacheRead: 3000, cacheCreation: 200 }]);
   });
 });

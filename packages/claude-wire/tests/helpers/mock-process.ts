@@ -15,7 +15,7 @@ export const createMockProcess = (ndjsonLines: string[], exitCode = 0): IClaudeP
   const stdout = new ReadableStream<Uint8Array>({
     async start(controller) {
       for (const line of ndjsonLines) {
-        controller.enqueue(encoder.encode(line + "\n"));
+        controller.enqueue(encoder.encode(`${line}\n`));
         // Yield to microtask queue so the reader can process each chunk
         await new Promise((r) => setTimeout(r, 0));
       }
@@ -83,7 +83,7 @@ export const createMultiTurnMockProcess = () => {
 
   const emitLines = (lines: string[]) => {
     for (const line of lines) {
-      controller.enqueue(encoder.encode(line + "\n"));
+      controller.enqueue(encoder.encode(`${line}\n`));
     }
   };
 

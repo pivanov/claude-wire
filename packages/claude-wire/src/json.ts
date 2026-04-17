@@ -3,11 +3,14 @@ import { ClaudeError } from "./errors.js";
 // Standard Schema protocol -- any library (Zod, Valibot, ArkType) that
 // implements this shape is accepted. We don't depend on @standard-schema/spec
 // at runtime; just match the interface.
+// The spec permits `validate` to return the result directly OR a Promise of
+// it (async refinements, e.g. Valibot's `pipeAsync`). The SDK awaits either
+// shape uniformly so async schemas don't silently bypass validation.
 export interface IStandardSchema<T = unknown> {
   "~standard": {
     version: 1;
     vendor: string;
-    validate: (value: unknown) => IStandardResult<T>;
+    validate: (value: unknown) => IStandardResult<T> | Promise<IStandardResult<T>>;
   };
 }
 
@@ -44,11 +47,11 @@ export const stripFences = (text: string): string => {
 // forwarded to --json-schema (parse-only, no TS inference).
 export type TSchemaInput<T> = IStandardSchema<T> | string;
 
-export const isStandardSchema = <T>(schema: TSchemaInput<T>): schema is IStandardSchema<T> => {
+const isStandardSchema = <T>(schema: TSchemaInput<T>): schema is IStandardSchema<T> => {
   return typeof schema === "object" && schema !== null && "~standard" in schema;
 };
 
-export const parseAndValidate = <T>(text: string, schema: TSchemaInput<T>): T => {
+export const parseAndValidate = async <T>(text: string, schema: TSchemaInput<T>): Promise<T> => {
   const stripped = stripFences(text);
 
   let parsed: unknown;
@@ -61,7 +64,10 @@ export const parseAndValidate = <T>(text: string, schema: TSchemaInput<T>): T =>
   }
 
   if (isStandardSchema(schema)) {
-    const result = schema["~standard"].validate(parsed);
+    // Standard Schema v1 permits validate() to return the result or a
+    // Promise of it. Await unconditionally -- awaiting a non-Promise is
+    // a no-op and keeps the sync/async paths unified.
+    const result = await schema["~standard"].validate(parsed);
     if (result.issues && result.issues.length > 0) {
       const summary = result.issues.map((i) => i.message ?? "validation error").join("; ");
       throw new JsonValidationError(`Schema validation failed: ${summary}`, text, result.issues);

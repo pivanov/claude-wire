@@ -21,13 +21,11 @@ export interface IClaudeSession extends AsyncDisposable {
   sessionId: string | undefined;
 }
 
-// Two-stage termination: SIGTERM first, escalate to SIGKILL after the
-// graceful-exit timeout. A stuck child (e.g. blocked on a syscall that
-// ignores SIGTERM) would otherwise survive the "graceful" path and leak.
-// The sentinel value distinguishes "exited on time" from "timeout fired"
-// without a side-channel boolean.
 // Compose two optional AbortSignals into one. If either fires, the
 // returned signal aborts. Returns undefined when both inputs are undefined.
+// Uses the platform `AbortSignal.any`, which owns listener lifetime --
+// the manual two-addEventListener version leaked listeners on the signal
+// that never fired. Available on Node 20.3+ / Bun, both within engines.
 const composeSignals = (a?: AbortSignal, b?: AbortSignal): AbortSignal | undefined => {
   if (!a && !b) {
     return undefined;
@@ -38,14 +36,7 @@ const composeSignals = (a?: AbortSignal, b?: AbortSignal): AbortSignal | undefin
   if (!b) {
     return a;
   }
-  const ctrl = new AbortController();
-  const abort = () => ctrl.abort();
-  a.addEventListener("abort", abort, { once: true });
-  b.addEventListener("abort", abort, { once: true });
-  if (a.aborted || b.aborted) {
-    ctrl.abort();
-  }
-  return ctrl.signal;
+  return AbortSignal.any([a, b]);
 };
 
 // Fire both session-level and per-ask onRetry, swallowing throws from either.
@@ -67,6 +58,11 @@ const fireRetry = (
   }
 };
 
+// Two-stage termination: SIGTERM first, escalate to SIGKILL after the
+// graceful-exit timeout. A stuck child (e.g. blocked on a syscall that
+// ignores SIGTERM) would otherwise survive the "graceful" path and leak.
+// The sentinel value distinguishes "exited on time" from "timeout fired"
+// without a side-channel boolean.
 const KILL_TIMED_OUT = Symbol("kill-timed-out");
 
 const gracefulKill = async (p: IClaudeProcess): Promise<void> => {
@@ -344,7 +340,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, askOpts?: IAskOptions): Promise<IJsonResult<T>> => {
     const raw = await ask(prompt, askOpts);
-    const data = parseAndValidate(raw.text, schema);
+    const data = await parseAndValidate(raw.text, schema);
     return { data, raw };
   };
 

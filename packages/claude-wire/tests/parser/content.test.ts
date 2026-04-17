@@ -96,8 +96,6 @@ describe("parseDoubleEncoded", () => {
   });
 
   test("decodes escaped content", () => {
-    expect(parseDoubleEncoded('"Fixed! The bug was an undefined variable reference."')).toBe(
-      "Fixed! The bug was an undefined variable reference.",
-    );
+    expect(parseDoubleEncoded('"Fixed! The bug was an undefined variable reference."')).toBe("Fixed! The bug was an undefined variable reference.");
   });
 });

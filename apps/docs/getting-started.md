@@ -89,6 +89,10 @@ console.log(data.score);   // 82
 
 Also available on sessions: `session.askJson(prompt, schema)`.
 
+::: tip Stateless classifiers
+For one-shot classification or extraction where each call is independent, use `claude.askJson()` directly -- not a session. See [Stateless Classifier Pattern](/guides/classifier).
+:::
+
 ## Multi-Turn Sessions
 
 Keep a process alive across multiple questions:

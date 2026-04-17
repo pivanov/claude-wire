@@ -63,7 +63,10 @@ describe("createTranslator", () => {
       const e2 = translator.translate({
         type: "assistant",
         message: {
-          content: [{ type: "thinking", thinking: "Let me think..." }, { type: "text", text: "Hello" }],
+          content: [
+            { type: "thinking", thinking: "Let me think..." },
+            { type: "text", text: "Hello" },
+          ],
         },
       });
       expect(e2).toHaveLength(1);
@@ -98,7 +101,10 @@ describe("createTranslator", () => {
       translator.translate({
         type: "assistant",
         message: {
-          content: [{ type: "text", text: "Searching the codebase..." }, { type: "tool_use", id: "toolu_grep1", name: "Grep", input: {} }],
+          content: [
+            { type: "text", text: "Searching the codebase..." },
+            { type: "tool_use", id: "toolu_grep1", name: "Grep", input: {} },
+          ],
         },
       });
 
@@ -144,8 +150,69 @@ describe("createTranslator", () => {
         expect(tc.costUsd).toBe(0.018);
         expect(tc.inputTokens).toBe(3500);
         expect(tc.outputTokens).toBe(120);
+        expect(tc.cacheReadTokens).toBe(3000);
+        expect(tc.cacheCreationTokens).toBe(0);
         expect(tc.contextWindow).toBe(200000);
         expect(tc.durationMs).toBe(8500);
+      }
+    });
+
+    test("omits cache fields when wire protocol has no cache data", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "result",
+        subtype: "success",
+        session_id: "sess-1",
+        result: '"Done"',
+        is_error: false,
+        total_cost_usd: 0.01,
+        modelUsage: {
+          "claude-sonnet-4-6": {
+            inputTokens: 500,
+            outputTokens: 100,
+          },
+        },
+      });
+
+      const tc = events[0];
+      if (tc?.type === "turn_complete") {
+        expect(tc.inputTokens).toBe(500);
+        expect(tc.cacheReadTokens).toBeUndefined();
+        expect(tc.cacheCreationTokens).toBeUndefined();
+      }
+    });
+
+    test("aggregates cache tokens across multi-model usage", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "result",
+        subtype: "success",
+        session_id: "sess-1",
+        result: '"Done"',
+        is_error: false,
+        total_cost_usd: 0.03,
+        modelUsage: {
+          "claude-sonnet-4-6": {
+            inputTokens: 500,
+            outputTokens: 100,
+            cacheReadInputTokens: 3000,
+            cacheCreationInputTokens: 200,
+            contextWindow: 200000,
+          },
+          "claude-haiku-4-5": {
+            inputTokens: 300,
+            outputTokens: 50,
+            cacheReadInputTokens: 1000,
+            contextWindow: 200000,
+          },
+        },
+      });
+
+      const tc = events[0];
+      if (tc?.type === "turn_complete") {
+        expect(tc.inputTokens).toBe(500 + 3000 + 200 + 300 + 1000);
+        expect(tc.cacheReadTokens).toBe(4000);
+        expect(tc.cacheCreationTokens).toBe(200);
       }
     });
 
@@ -175,9 +242,7 @@ describe("createTranslator", () => {
       const events = translator.translate({
         type: "user",
         message: {
-          content: [
-            { type: "tool_result", tool_use_id: "toolu_1", content: "file content here", is_error: false },
-          ],
+          content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "file content here", is_error: false }],
         },
       });
 

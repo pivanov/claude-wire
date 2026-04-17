@@ -1,6 +1,6 @@
-import { describe, expect, test, spyOn } from "bun:test";
-import { buildResult, dispatchToolDecision, extractText } from "@/pipeline.js";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createCostTracker } from "@/cost.js";
+import { applyTurnComplete, buildResult, dispatchToolDecision, extractText } from "@/pipeline.js";
 import type { IClaudeProcess } from "@/process.js";
 import type { IToolHandlerInstance } from "@/tools/handler.js";
 import type { TRelayEvent, TToolUseEvent } from "@/types/events.js";
@@ -48,8 +48,45 @@ describe("buildResult", () => {
     const events: TRelayEvent[] = [{ type: "text", content: "partial" }];
     const tracker = createCostTracker();
     const result = buildResult(events, tracker, undefined);
-    expect(result.duration).toBe(0);
+    // Undefined (not 0) so consumers can tell "measurement unavailable"
+    // apart from a genuinely fast turn.
+    expect(result.duration).toBeUndefined();
     expect(result.sessionId).toBeUndefined();
+  });
+});
+
+describe("applyTurnComplete", () => {
+  test("threads cache tokens into cost tracker", () => {
+    const tracker = createCostTracker();
+    applyTurnComplete(
+      { type: "turn_complete", costUsd: 0.01, inputTokens: 3500, outputTokens: 120, cacheReadTokens: 3000, cacheCreationTokens: 200 },
+      tracker,
+    );
+    const snap = tracker.snapshot();
+    expect(snap.tokens.cacheRead).toBe(3000);
+    expect(snap.tokens.cacheCreation).toBe(200);
+  });
+
+  test("adds offsets to cache tokens", () => {
+    const tracker = createCostTracker();
+    applyTurnComplete({ type: "turn_complete", costUsd: 0.01, inputTokens: 1000, outputTokens: 50, cacheReadTokens: 500 }, tracker, {
+      totalUsd: 0.005,
+      tokens: { input: 2000, output: 100, cacheRead: 1000, cacheCreation: 100 },
+    });
+    const snap = tracker.snapshot();
+    expect(snap.tokens.input).toBe(3000);
+    expect(snap.tokens.cacheRead).toBe(1500);
+    expect(snap.tokens.cacheCreation).toBe(100);
+  });
+
+  test("preserves offset cache tokens when event has none", () => {
+    const tracker = createCostTracker();
+    applyTurnComplete({ type: "turn_complete", costUsd: 0.01, inputTokens: 1000, outputTokens: 50 }, tracker, {
+      totalUsd: 0.005,
+      tokens: { input: 2000, output: 100, cacheRead: 1000 },
+    });
+    const snap = tracker.snapshot();
+    expect(snap.tokens.cacheRead).toBe(1000);
   });
 });
 

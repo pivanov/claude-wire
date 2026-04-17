@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["./packages/*/src/**/*.ts", "./apps/**/*.ts"]
+    "includes": ["./packages/*/src/**/*.ts", "./packages/*/tests/**/*.ts", "./apps/**/*.ts"]
   },
   "formatter": {
     "enabled": true,
@@ -74,6 +74,19 @@
       },
       "formatter": {
         "enabled": false
+      }
+    },
+    {
+      "includes": ["**/tests/**/*.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
       }
     }
   ]

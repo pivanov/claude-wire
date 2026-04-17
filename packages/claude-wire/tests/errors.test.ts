@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AbortError, BudgetExceededError, KnownError, ProcessError, isKnownError, isTransientError } from "@/errors.js";
+import { AbortError, BudgetExceededError, isKnownError, isTransientError, KnownError, ProcessError } from "@/errors.js";
 
 describe("isTransientError", () => {
   test("ECONNREFUSED matches", () => {

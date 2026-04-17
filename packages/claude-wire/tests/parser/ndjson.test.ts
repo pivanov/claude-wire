@@ -28,6 +28,40 @@ describe("parseLine", () => {
     expect(parseLine('{"type":"system"')).toBeUndefined();
   });
 
+  test("calls onWarning when a line fails to parse", () => {
+    const warnings: Array<{ message: string; cause: unknown }> = [];
+    const result = parseLine("not json", (message, cause) => {
+      warnings.push({ message, cause });
+    });
+    expect(result).toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.message).toContain("Skipped malformed NDJSON line");
+    expect(warnings[0]?.message).toContain("not json");
+    expect(warnings[0]?.cause).toBeInstanceOf(SyntaxError);
+  });
+
+  test("truncates long snippets in the warning message", () => {
+    const longLine = `{"bad":"${"x".repeat(500)}`;
+    let captured = "";
+    parseLine(longLine, (message) => {
+      captured = message;
+    });
+    // 120-char cap + ellipsis is far shorter than the 500-char input.
+    expect(captured.length).toBeLessThan(200);
+    expect(captured).toContain("…");
+  });
+
+  test("does not invoke onWarning for empty lines", () => {
+    let called = false;
+    parseLine("", () => {
+      called = true;
+    });
+    parseLine("   ", () => {
+      called = true;
+    });
+    expect(called).toBe(false);
+  });
+
   test("trims whitespace before parsing", () => {
     const line = '  {"type":"assistant"}  ';
     const result = parseLine(line);

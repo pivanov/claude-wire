@@ -39,6 +39,8 @@ export type TTurnCompleteEvent = {
   costUsd?: number;
   inputTokens?: number;
   outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   contextWindow?: number;
   durationMs?: number;
 };

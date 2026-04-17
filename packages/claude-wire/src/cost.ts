@@ -11,7 +11,7 @@ export interface ICostProjection {
 export interface ICostTracker {
   // All values are REPLACEMENTS, not deltas. The wire protocol's total_cost_usd
   // is already cumulative. Session.ts handles offsets when respawning processes.
-  update: (totalCostUsd: number, totalInputTokens: number, totalOutputTokens: number) => void;
+  update: (totalCostUsd: number, totalInputTokens: number, totalOutputTokens: number, cacheReadTokens?: number, cacheCreationTokens?: number) => void;
   snapshot: () => TCostSnapshot;
   checkBudget: () => void;
   reset: () => void;
@@ -35,17 +35,28 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
   let totalUsd = 0;
   let input = 0;
   let output = 0;
+  let cacheRead: number | undefined;
+  let cacheCreation: number | undefined;
   let turns = 0;
 
   const snapshot = (): TCostSnapshot => ({
     totalUsd,
-    tokens: { input, output },
+    tokens: { input, output, cacheRead, cacheCreation },
   });
 
-  const update = (totalCostUsd: number, totalInputToks: number, totalOutputToks: number) => {
+  const update = (totalCostUsd: number, totalInputToks: number, totalOutputToks: number, cacheReadToks?: number, cacheCreationToks?: number) => {
     totalUsd = totalCostUsd;
     input = totalInputToks;
     output = totalOutputToks;
+    // Preserve last-known cache values when the turn doesn't report them
+    // (e.g. the CLI omits modelUsage). Replacing with undefined would lose
+    // history the consumer has already been shown.
+    if (cacheReadToks !== undefined) {
+      cacheRead = cacheReadToks;
+    }
+    if (cacheCreationToks !== undefined) {
+      cacheCreation = cacheCreationToks;
+    }
     turns++;
 
     if (options.onCostUpdate) {
@@ -67,13 +78,16 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
     totalUsd = 0;
     input = 0;
     output = 0;
+    cacheRead = undefined;
+    cacheCreation = undefined;
     turns = 0;
   };
 
-  const project = (remainingTurns: number): ICostProjection => {
-    const avg = turns > 0 ? totalUsd / turns : 0;
-    return { projectedUsd: totalUsd + avg * remainingTurns };
-  };
+  const avg = () => (turns > 0 ? totalUsd / turns : 0);
+
+  const project = (remainingTurns: number): ICostProjection => ({
+    projectedUsd: totalUsd + avg() * remainingTurns,
+  });
 
   return {
     update,
@@ -84,7 +98,7 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
       return turns;
     },
     get averagePerTurn() {
-      return turns > 0 ? totalUsd / turns : 0;
+      return avg();
     },
     project,
   };

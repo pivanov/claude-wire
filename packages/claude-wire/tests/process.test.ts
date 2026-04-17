@@ -93,7 +93,12 @@ describe("buildArgs", () => {
 
   test("includes --add-dir for each directory", () => {
     const args = buildArgs({ addDirs: ["/a", "/b"] }, binary);
-    const indices = args.reduce<number[]>((acc, a, i) => (a === "--add-dir" ? [...acc, i] : acc), []);
+    const indices: number[] = [];
+    args.forEach((a, i) => {
+      if (a === "--add-dir") {
+        indices.push(i);
+      }
+    });
     expect(indices).toHaveLength(2);
     expect(args[indices[0]! + 1]).toBe("/a");
     expect(args[indices[1]! + 1]).toBe("/b");
@@ -105,14 +110,17 @@ describe("buildArgs", () => {
   });
 
   test("includes boolean flags", () => {
-    const args = buildArgs({
-      includeHookEvents: true,
-      includePartialMessages: true,
-      bare: true,
-      forkSession: true,
-      noSessionPersistence: true,
-      disableSlashCommands: true,
-    }, binary);
+    const args = buildArgs(
+      {
+        includeHookEvents: true,
+        includePartialMessages: true,
+        bare: true,
+        forkSession: true,
+        noSessionPersistence: true,
+        disableSlashCommands: true,
+      },
+      binary,
+    );
     expect(args).toContain("--include-hook-events");
     expect(args).toContain("--include-partial-messages");
     expect(args).toContain("--bare");
@@ -172,14 +180,10 @@ describe("buildSpawnEnv", () => {
   });
 
   test("full 4-way precedence: parent < alias < options.env < options.configDir", () => {
-    const env = buildSpawnEnv(
-      { CLAUDE_CONFIG_DIR: "/parent", PATH: "/bin" },
-      "/alias",
-      {
-        env: { CLAUDE_CONFIG_DIR: "/user-env", EXTRA: "yes" },
-        configDir: "/winner",
-      },
-    );
+    const env = buildSpawnEnv({ CLAUDE_CONFIG_DIR: "/parent", PATH: "/bin" }, "/alias", {
+      env: { CLAUDE_CONFIG_DIR: "/user-env", EXTRA: "yes" },
+      configDir: "/winner",
+    });
     expect(env?.CLAUDE_CONFIG_DIR).toBe("/winner");
     expect(env?.PATH).toBe("/bin");
     expect(env?.EXTRA).toBe("yes");
