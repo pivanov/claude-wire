@@ -54,7 +54,7 @@ export const dispatchToolDecision = async (
     const isError = "isError" in decision ? decision.isError : undefined;
     safeWrite(proc, writer.toolResult(event.toolUseId, decision.result, isError ? { isError: true } : undefined));
   } else {
-    warn("Invalid tool decision, defaulting to deny");
+    warn("Invalid tool decision, defaulting to deny", decision);
     safeWrite(proc, writer.deny(event.toolUseId));
   }
 };

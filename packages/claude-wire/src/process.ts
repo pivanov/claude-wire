@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BINARY } from "./constants.js";
-import { errorMessage, KnownError, ProcessError } from "./errors.js";
+import { ClaudeError, errorMessage, KnownError, ProcessError } from "./errors.js";
 import { isExecutableNonEmpty, spawnProcess, whichSync } from "./runtime.js";
 import type { IClaudeOptions } from "./types/options.js";
 import { assertPositiveNumber } from "./validation.js";
@@ -144,6 +144,9 @@ export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] 
 
   if (options.allowedTools) {
     if (options.allowedTools.length === 0) {
+      // Empty array means "no tools at all". The CLI uses --tools "" to
+      // disable all tools (including MCP). Non-empty lists use the distinct
+      // --allowedTools flag which selectively enables named tools.
       args.push("--tools", "");
     } else {
       args.push("--allowedTools", options.allowedTools.join(","));
@@ -215,6 +218,12 @@ export const buildSpawnEnv = (
 
 export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
   assertPositiveNumber(options.maxBudgetUsd, "maxBudgetUsd");
+
+  // Catch mutually exclusive session flags early. The CLI's behavior with
+  // conflicting combinations is undefined and version-dependent.
+  if (options.resume && options.continueSession) {
+    throw new ClaudeError("Cannot set both 'resume' and 'continueSession' -- use one or the other");
+  }
   const resolved = resolve();
   const args = buildArgs(options, resolved.binaryPath);
 

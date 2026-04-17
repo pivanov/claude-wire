@@ -442,6 +442,66 @@ describe("createTranslator", () => {
     });
   });
 
+  describe("edge cases", () => {
+    test("drops malformed tool_use blocks with missing id or name", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "Read" }, { type: "tool_use", id: "toolu_1" }, { type: "tool_use" }],
+        },
+      });
+      expect(events).toHaveLength(0);
+    });
+
+    test("silently drops unknown block types", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "image" as any, text: "data" }],
+        },
+      });
+      expect(events).toHaveLength(0);
+    });
+
+    test("empty text blocks are dropped", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "text", text: "" }],
+        },
+      });
+      expect(events).toHaveLength(0);
+    });
+
+    test("empty thinking blocks are dropped", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "thinking" }],
+        },
+      });
+      expect(events).toHaveLength(0);
+    });
+
+    test("tool_use with null input defaults to empty object", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: null }],
+        },
+      });
+      expect(events).toHaveLength(1);
+      if (events[0]?.type === "tool_use") {
+        expect(events[0].input).toEqual({});
+      }
+    });
+  });
+
   describe("multi-agent fixture", () => {
     test("produces events from interleaved agents", () => {
       const events = translateFixture("multi-agent.ndjson");

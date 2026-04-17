@@ -229,6 +229,10 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   };
 
   const doAsk = async (prompt: string, askOpts?: IAskOptions): Promise<TAskResult> => {
+    // Reset per-ask so a prior abort/timeout doesn't bleed crash budget
+    // into the next ask. The budget is per-ask, not per-session.
+    consecutiveCrashes = 0;
+
     if (!proc) {
       spawnFresh(prompt, currentSessionId);
     } else if (!safeWrite(proc, writer.user(prompt))) {

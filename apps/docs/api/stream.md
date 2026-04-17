@@ -84,6 +84,10 @@ for await (const event of stream) { /* gets events */ }
 for await (const event of stream) { /* silently yields nothing */ }
 ```
 
+::: warning
+If `.text()`, `.cost()`, or `.result()` was called between the two iterations (or before the second one), the second iteration throws a `ClaudeError` instead of silently yielding nothing. Calling a convenience method marks the stream as consumed, making any subsequent iteration an error rather than a no-op.
+:::
+
 ## Timeouts
 
 Streams have a 5-minute timeout per read operation. If Claude doesn't respond within this window, a `TimeoutError` is thrown and the process is killed.

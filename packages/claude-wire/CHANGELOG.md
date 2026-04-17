@@ -1,5 +1,36 @@
 # @pivanov/claude-wire
 
+## 0.1.2
+
+### Patch Changes
+
+- **Fixes**
+
+  - Node.js signal-killed processes now resolve with `128+signum` exit codes (matching Bun). Previously all signal kills resolved as exit code `1`, bypassing `TRANSIENT_EXIT_CODES` (137/141/143) and preventing auto-retry on Node for SIGKILL/SIGTERM/SIGPIPE.
+  - `consecutiveCrashes` is reset at the start of each `ask()`. Previously, an abort or timeout mid-retry leaked the crash counter into the next `ask()`, shrinking its retry budget.
+  - `stream.ts` exit-code-0-without-turn-complete now passes the exit code to `processExitedEarly`, so the error carries the actual code instead of `undefined`.
+  - `dispatchToolDecision` invalid-decision warning now includes the actual decision value for debuggability.
+  - `stream[Symbol.asyncDispose]` now awaits process exit (capped at `gracefulExitMs`) instead of fire-and-forget SIGTERM. Prevents child process accumulation in tight create/dispose loops.
+  - `drainStderr` caps accumulated chunks at 1MB to prevent unbounded memory growth on verbose CLI builds.
+  - `spawnClaude` rejects conflicting `resume` + `continueSession` options early instead of passing undefined flag combinations to the CLI.
+  - `--tools ""` vs `--allowedTools` flag asymmetry documented inline.
+
+  **Docs**
+
+  - `TAskResult.duration` corrected to `number | undefined` in `api/client.md`.
+  - Stream second-iteration behavior clarified: throws `ClaudeError` after `.text()`/`.result()`, not silent no-op.
+  - `writer.toolResult` signature updated with `options?: { isError?: boolean }` third parameter.
+  - `TSessionMetaEvent` documented as re-emitted on session process respawn.
+  - New `askJson` example (09-ask-json.ts) added to example runner.
+  - Supported by LogicStar AI attribution in README and docs footer.
+
+  **Tests (+36, 231 -> 267)**
+
+  - New test files: `async.test.ts` (withTimeout), `warnings.test.ts` (createWarn observer isolation), `validation.test.ts` (assertPositiveNumber, requireNonEmpty).
+  - `processExitedEarly`, `errorMessage`, `BudgetExceededError` fields now tested.
+  - `dispatchToolDecision` approve, custom result, isError, and invalid-decision-value paths covered.
+  - Translator edge cases: malformed tool_use, unknown block types, empty text/thinking, null input.
+
 ## 0.1.1
 
 ### Patch Changes

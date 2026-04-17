@@ -7,5 +7,6 @@ apps/docs/.vitepress/dist/
 *.tgz
 CLAUDE.md
 .claude/
+ideas.md
 # README is copied from the monorepo root by `prepublishOnly`.
 packages/claude-wire/README.md

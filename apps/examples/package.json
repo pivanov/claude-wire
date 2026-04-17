@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@pivanov/claude-wire": "workspace:*",
-    "@inquirer/prompts": "^7.0.0"
+    "@inquirer/prompts": "^7.0.0",
+    "zod": "^3.24.0"
   }
 }

@@ -101,7 +101,7 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
           const exitMsg = stderrText || `Claude process exited with code ${exitCode}`;
           throw new ProcessError(exitMsg, exitCode);
         }
-        throw processExitedEarly(stderrText);
+        throw processExitedEarly(stderrText, exitCode);
       }
     } finally {
       currentReader.releaseLock();
@@ -150,19 +150,6 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
     return buildResult(bufferedEvents, costTracker, sessionId);
   };
 
-  const cleanup = () => {
-    // One-shot kill: streams are single-turn, so unlike session.gracefulKill
-    // there's no second ask() to worry about leaving the child stranded for.
-    // SIGTERM is sufficient -- a stuck child would be the CLI's bug, and we
-    // wouldn't gain anything by blocking cleanup() on a SIGKILL escalation.
-    // Always kill if a proc was ever spawned -- the generator's finally may
-    // not have run yet (e.g., iterator created but never ticked). Redundant
-    // kill on an already-exited process is a harmless ESRCH.
-    if (proc) {
-      proc.kill();
-    }
-  };
-
   return {
     [Symbol.asyncIterator]: () => {
       if (consumePromise) {
@@ -175,7 +162,10 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
     cost,
     result,
     [Symbol.asyncDispose]: async () => {
-      cleanup();
+      if (proc) {
+        proc.kill();
+        await withTimeout(proc.exited, TIMEOUTS.gracefulExitMs);
+      }
     },
   };
 };

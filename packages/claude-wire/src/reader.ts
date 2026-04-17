@@ -29,8 +29,12 @@ export interface IStderrDrain {
   text: () => string;
 }
 
+// Cap accumulated stderr at 1MB to bound memory on verbose CLI builds.
+const STDERR_MAX_BYTES = 1024 * 1024;
+
 export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): IStderrDrain => {
   const chunks: string[] = [];
+  let totalLen = 0;
   const stderrReader = proc.stderr.getReader();
   const decoder = new TextDecoder();
   const done = (async () => {
@@ -40,14 +44,18 @@ export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): IStde
         if (isDone) {
           break;
         }
-        chunks.push(decoder.decode(value, { stream: true }));
+        const text = decoder.decode(value, { stream: true });
+        totalLen += text.length;
+        if (totalLen <= STDERR_MAX_BYTES) {
+          chunks.push(text);
+        }
       }
     } catch {
       // process exited
     } finally {
       // Flush any trailing partial multibyte sequence.
       const tail = decoder.decode();
-      if (tail) {
+      if (tail && totalLen <= STDERR_MAX_BYTES) {
         chunks.push(tail);
       }
       stderrReader.releaseLock();

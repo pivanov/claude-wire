@@ -76,6 +76,10 @@ Emitted once at the start of a session with metadata.
 }
 ```
 
+::: info Session mode: re-emitted on respawn
+In session mode, `session_meta` is re-emitted after each process respawn -- for example, on auto-retry after a transient failure or after a turn-limit recycle. It is not emitted exactly once per logical session; treat each emission as the start of a new underlying process within the same session.
+:::
+
 ## `TTurnCompleteEvent`
 
 Emitted at the end of each turn with cost, token, and timing data.
