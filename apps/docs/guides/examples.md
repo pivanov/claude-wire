@@ -1,6 +1,6 @@
 # Examples
 
-Interactive example runner with 8 demos covering every major feature.
+Interactive example runner with 9 demos covering every major feature.
 
 ## Setup
 
@@ -32,5 +32,6 @@ This opens an interactive menu where you pick which example to run. After each e
 | 06 | Abort with timeout | `AbortSignal.timeout()` cancellation |
 | 07 | System prompt | Custom `systemPrompt` to change Claude's behavior |
 | 08 | Resume session | Create a session, then resume it by ID |
+| 09 | Ask JSON | `claude.askJson()` with a Zod schema for typed, validated output |
 
 All examples use `model: "haiku"` for fast, cheap responses.

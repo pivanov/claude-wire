@@ -67,6 +67,9 @@ Provide a custom result for a tool instead of letting it execute.
 
 ```ts
 writer.toolResult("toolu_abc123", "mocked file contents");
+
+// Mark the result as an error:
+writer.toolResult("toolu_abc123", "permission denied", { isError: true });
 ```
 
 ## `abort`

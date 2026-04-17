@@ -1,5 +1,6 @@
 import { execFileSync, spawn as nodeSpawn } from "node:child_process";
-import { accessSync, constants, statSync } from "node:fs";
+import { accessSync, constants as fsConstants, statSync } from "node:fs";
+import { constants as osConstants } from "node:os";
 import { Readable } from "node:stream";
 import { ProcessError } from "./errors.js";
 
@@ -54,7 +55,7 @@ export const whichSync = (name: string): string | undefined => {
 // Name reflects behavior: this is NOT a generic fs.exists check.
 export const isExecutableNonEmpty = (path: string): boolean => {
   try {
-    accessSync(path, constants.X_OK);
+    accessSync(path, fsConstants.X_OK);
     return statSync(path).size > 0;
   } catch {
     return false;
@@ -108,8 +109,17 @@ const spawnNode = (args: string[], opts: ISpawnOpts): IRawProcess => {
   }
 
   const exited = new Promise<number>((resolve, reject) => {
-    child.on("exit", (code) => {
-      resolve(code ?? 1);
+    child.on("exit", (code, signal) => {
+      if (code !== null) {
+        resolve(code);
+      } else if (signal && signal in osConstants.signals) {
+        // Node.js sets code=null when the child is killed by a signal.
+        // Compute the conventional 128+signum so exit codes match Bun's
+        // behavior and TRANSIENT_EXIT_CODES (137/141/143) work on Node.
+        resolve(128 + osConstants.signals[signal as keyof typeof osConstants.signals]);
+      } else {
+        resolve(1);
+      }
     });
     child.on("error", reject);
   });

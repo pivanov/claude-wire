@@ -68,7 +68,7 @@ export default defineConfig({
     },
 
     footer: {
-      message: "Not affiliated with or endorsed by Anthropic.",
+      message: 'Not affiliated with or endorsed by Anthropic. Supported by <a href="https://logicstar.ai/">LogicStar AI</a>.',
       copyright: "MIT License | Made by Pavel Ivanov",
     },
   },

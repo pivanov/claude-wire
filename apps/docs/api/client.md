@@ -25,7 +25,7 @@ type TAskResult = {
     cacheRead?: number;                // tokens read from prompt cache
     cacheCreation?: number;            // tokens written to prompt cache
   };
-  duration: number;                    // ms
+  duration: number | undefined;        // ms
   sessionId?: string;
   events: TRelayEvent[];               // all events
 };

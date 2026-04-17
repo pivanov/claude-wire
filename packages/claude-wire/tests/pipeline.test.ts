@@ -143,4 +143,57 @@ describe("dispatchToolDecision", () => {
     expect(JSON.parse(writes[0]!)).toEqual({ type: "deny", tool_use_id: "toolu_x" });
     warn.mockRestore();
   });
+
+  test("approve decision writes approve message", async () => {
+    const { proc, writes } = makeProc();
+    const handler: IToolHandlerInstance = {
+      decide: async () => "approve",
+    };
+
+    await dispatchToolDecision(proc, handler, makeToolEvent());
+
+    expect(JSON.parse(writes[0]!)).toEqual({ type: "approve", tool_use_id: "toolu_x" });
+  });
+
+  test("custom result decision writes tool_result message", async () => {
+    const { proc, writes } = makeProc();
+    const handler: IToolHandlerInstance = {
+      decide: async () => ({ result: "mocked content" }),
+    };
+
+    await dispatchToolDecision(proc, handler, makeToolEvent());
+
+    const parsed = JSON.parse(writes[0]!);
+    expect(parsed.type).toBe("tool_result");
+    expect(parsed.tool_use_id).toBe("toolu_x");
+    expect(parsed.content).toBe("mocked content");
+    expect(parsed.is_error).toBeUndefined();
+  });
+
+  test("custom result with isError writes tool_result with is_error", async () => {
+    const { proc, writes } = makeProc();
+    const handler: IToolHandlerInstance = {
+      decide: async () => ({ result: "error output", isError: true }),
+    };
+
+    await dispatchToolDecision(proc, handler, makeToolEvent());
+
+    const parsed = JSON.parse(writes[0]!);
+    expect(parsed.type).toBe("tool_result");
+    expect(parsed.is_error).toBe(true);
+  });
+
+  test("invalid decision warning includes the decision value", async () => {
+    const { proc } = makeProc();
+    const handler: IToolHandlerInstance = {
+      // @ts-expect-error -- intentionally invalid
+      decide: async () => 42,
+    };
+    const warnings: unknown[] = [];
+    const onWarning = (_msg: string, cause?: unknown) => warnings.push(cause);
+
+    await dispatchToolDecision(proc, handler, makeToolEvent(), onWarning);
+
+    expect(warnings).toEqual([42]);
+  });
 });

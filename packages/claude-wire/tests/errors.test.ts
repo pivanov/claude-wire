@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { AbortError, BudgetExceededError, isKnownError, isTransientError, KnownError, ProcessError } from "@/errors.js";
+import {
+  AbortError,
+  BudgetExceededError,
+  errorMessage,
+  isKnownError,
+  isTransientError,
+  KnownError,
+  ProcessError,
+  processExitedEarly,
+} from "@/errors.js";
 
 describe("isTransientError", () => {
   test("ECONNREFUSED matches", () => {
@@ -78,5 +87,67 @@ describe("isKnownError", () => {
   test("returns false for non-errors", () => {
     expect(isKnownError("string")).toBe(false);
     expect(isKnownError(null)).toBe(false);
+  });
+});
+
+describe("processExitedEarly", () => {
+  test("returns KnownError when stderr matches a classified pattern", () => {
+    const err = processExitedEarly("rate limit exceeded 429", 1);
+    expect(err).toBeInstanceOf(KnownError);
+    if (err instanceof KnownError) {
+      expect(err.code).toBe("rate-limit");
+    }
+  });
+
+  test("returns ProcessError when stderr does not match any pattern", () => {
+    const err = processExitedEarly("some random error", 1);
+    expect(err).toBeInstanceOf(ProcessError);
+    if (err instanceof ProcessError) {
+      expect(err.exitCode).toBe(1);
+    }
+  });
+
+  test("returns ProcessError with default message when stderr is empty", () => {
+    const err = processExitedEarly("");
+    expect(err).toBeInstanceOf(ProcessError);
+    expect(err.message).toBe("Process exited without completing the turn");
+  });
+
+  test("passes exit code through to ProcessError", () => {
+    const err = processExitedEarly("", 137);
+    expect(err).toBeInstanceOf(ProcessError);
+    if (err instanceof ProcessError) {
+      expect(err.exitCode).toBe(137);
+    }
+  });
+
+  test("classifies overloaded stderr", () => {
+    const err = processExitedEarly("overloaded_error: service temporarily unavailable");
+    expect(err).toBeInstanceOf(KnownError);
+    if (err instanceof KnownError) {
+      expect(err.code).toBe("overloaded");
+    }
+  });
+});
+
+describe("errorMessage", () => {
+  test("extracts message from Error", () => {
+    expect(errorMessage(new Error("boom"))).toBe("boom");
+  });
+
+  test("stringifies non-Error values", () => {
+    expect(errorMessage("string error")).toBe("string error");
+    expect(errorMessage(42)).toBe("42");
+    expect(errorMessage(null)).toBe("null");
+  });
+});
+
+describe("BudgetExceededError", () => {
+  test("exposes spent and budget fields", () => {
+    const err = new BudgetExceededError(0.5, 0.1);
+    expect(err.spent).toBe(0.5);
+    expect(err.budget).toBe(0.1);
+    expect(err.message).toContain("0.5000");
+    expect(err.message).toContain("0.1000");
   });
 });

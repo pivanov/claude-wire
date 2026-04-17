@@ -55,7 +55,7 @@ cd claude-wire && bun install
 bun run examples
 ```
 
-Interactive menu with 8 runnable demos covering ask, streaming, sessions, tool control, cost budgets, abort, system prompts, and session resume.
+Interactive menu with 9 runnable demos covering ask, askJson, streaming, sessions, tool control, cost budgets, abort, system prompts, and session resume.
 
 ## Project Structure
 
@@ -69,12 +69,16 @@ apps/examples/          interactive example runner
 
 ```bash
 bun install
-bun run test        # 217 tests
+bun run test        # 267 tests
 bun run typecheck
 bun run lint
 bun run docs:dev    # local docs server
 bun run examples    # try the examples
 ```
+
+## Sponsors
+
+Supported by [LogicStar AI](https://logicstar.ai/)
 
 ## License
 

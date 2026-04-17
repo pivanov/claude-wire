@@ -22,6 +22,7 @@ const examples = [
   "./06-abort.js",
   "./07-system-prompt.js",
   "./08-resume.js",
+  "./09-ask-json.js",
 ];
 
 const main = async () => {
