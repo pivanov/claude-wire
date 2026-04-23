@@ -2,26 +2,31 @@
 
 `claude-wire` ships with a companion [Claude Code](https://claude.ai/download) skill, [`ask-json`](https://github.com/pivanov/ai-skills/tree/main/skills/ask-json), that teaches the main Claude agent to delegate "give me typed JSON" work to the CLI as a cheap sub-agent.
 
-When the main Claude is about to call `Agent` / `Task` and then regex-parse JSON out of a prose response, the skill redirects it to `npx @pivanov/claude-wire@^0.1.6 ask-json` instead. The call returns schema-validated JSON that main Claude can `JSON.parse` and act on immediately -- no prompt-engineering the output format, no prose parsing.
+When the main Claude is about to call `Agent` / `Task` and then regex-parse JSON out of a prose response, the skill redirects it to `claude-wire ask-json` instead. The call returns schema-validated JSON that main Claude can `JSON.parse` and act on immediately -- no prompt-engineering the output format, no prose parsing.
 
 ## Installation
 
-The skill is published to [skills.sh](https://skills.sh) via the [`pivanov/ai-skills`](https://github.com/pivanov/ai-skills) repo.
+Two one-time steps:
+
+**1. Install the CLI globally:**
+
+```bash
+bun add -g @pivanov/claude-wire
+# or: npm install -g @pivanov/claude-wire
+```
+
+Verify with `claude-wire --version` (should print `0.1.6` or higher).
+
+**2. Install the skill** (published to [skills.sh](https://skills.sh) via the [`pivanov/ai-skills`](https://github.com/pivanov/ai-skills) repo):
 
 ```bash
 npx skills add pivanov/ai-skills --skill ask-json
 ```
 
-That's it. skills.sh drops a single `SKILL.md` into your Claude Code config. No npm packages are installed -- the skill invokes `claude-wire` through `npx` on demand, and `npx` caches after the first call.
+That's it. skills.sh drops a single `SKILL.md` into your Claude Code config. The skill invokes the globally-installed `claude-wire` binary directly.
 
-::: tip Heavy use
-For tight loops (e.g. running `/ask-json` dozens of times in a sweep), install `claude-wire` globally once to skip the `npx` lookup:
-
-```bash
-bun add -g @pivanov/claude-wire
-```
-
-The skill auto-detects a global install and uses it when present.
+::: tip Why global install, not npx?
+Many Claude Code permission configurations auto-deny `npx ...` because it fetches and executes arbitrary packages on every run. Calling the installed binary sidesteps that gate entirely. An `npx @pivanov/claude-wire@^0.1.6 ...` fallback is documented in the skill for users whose configs allow it, but the binary-first path is strongly preferred.
 :::
 
 ## How main Claude uses it
@@ -61,7 +66,7 @@ cat > /tmp/triage.json <<'EOF'
 }
 EOF
 
-npx @pivanov/claude-wire@^0.1.6 ask-json \
+claude-wire ask-json \
   --model sonnet \
   --prompt "Triage these incidents: $INCIDENTS" \
   --schema-file /tmp/triage.json
