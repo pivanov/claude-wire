@@ -62,6 +62,7 @@ cat > /tmp/triage.json <<'EOF'
 EOF
 
 npx @pivanov/claude-wire@^0.1.5 ask-json \
+  --model sonnet \
   --prompt "Triage these incidents: $INCIDENTS" \
   --schema-file /tmp/triage.json
 ```
@@ -76,7 +77,9 @@ Main Claude reads `.data` and continues. The `.costUsd` / `.tokens` values are s
 
 ## Default model
 
-The skill defaults to `haiku`. The entire value prop is "don't burn Sonnet or Opus on a classifier." Main Claude only escalates to `sonnet` on a validation failure (exit code 1), and never to `opus` automatically -- if a task genuinely needs Opus-class reasoning, the skill yields to the native `Agent` tool instead.
+The skill invokes the CLI with `--model sonnet`. The CLI's own default is `haiku` -- intended for script/CI users who know their workload is stable enough -- but `haiku`'s `--json-schema` compliance is best-effort, and it frequently returns prose on ad-hoc "classify X" prompts. Starting at `sonnet` trades a ~10× cost bump (still cents per call) for reliable schema adherence; main Claude picks up typed data on the first try instead of paying for a haiku flake + a sonnet retry. Opus is almost never the right answer here -- if the task genuinely needs Opus-class reasoning, the skill yields to the native `Agent` tool instead.
+
+Power users running dozens-to-hundreds of near-identical extractions can override with `--model haiku` once they've verified haiku is reliable for their specific schema.
 
 ## Version pinning
 

@@ -1,4 +1,4 @@
-import { type IJsonResult, parseAndValidate, type TSchemaInput } from "./json.js";
+import { DEFAULT_JSON_SYSTEM_PROMPT, type IJsonResult, parseAndValidate, type TSchemaInput } from "./json.js";
 import type { IClaudeSession } from "./session.js";
 import { createSession } from "./session.js";
 import type { IClaudeStream } from "./stream.js";
@@ -44,6 +44,15 @@ export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
     // way after the response arrives.
     if (typeof schema === "string") {
       merged.jsonSchema = schema;
+    }
+    // Force JSON-only output at the prompt level. `--json-schema` is a hint
+    // that Claude Code's CLI doesn't hard-enforce, so sonnet/haiku both
+    // regularly wrap JSON in prose ("Here is the JSON: {...}") or respond in
+    // pure prose on short "classify X" prompts. A system-prompt instruction
+    // is the most portable way to get reliable JSON across model versions.
+    // Explicit caller systemPrompt wins; we only fill in when it's unset.
+    if (merged.systemPrompt === undefined) {
+      merged.systemPrompt = DEFAULT_JSON_SYSTEM_PROMPT;
     }
     const raw = await ask(prompt, merged);
     const data = await parseAndValidate(raw.text, schema);

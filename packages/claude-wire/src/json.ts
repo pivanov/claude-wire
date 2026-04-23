@@ -35,6 +35,14 @@ export interface IJsonResult<T> {
   raw: import("./types/results.js").TAskResult;
 }
 
+// Injected as the default system prompt by `askJson` when the caller didn't
+// set one. `--json-schema` at the CLI layer is a hint, not a hard constraint,
+// so sonnet/haiku both frequently wrap JSON in prose or return pure prose on
+// short "classify X" prompts. A system-prompt-level instruction is the most
+// portable way to force JSON-only output across model versions.
+export const DEFAULT_JSON_SYSTEM_PROMPT =
+  "You MUST respond with ONLY valid JSON matching the provided schema. No prose. No markdown fences. No explanatory text before or after. Your entire response must be directly parseable by JSON.parse().";
+
 // Strip common fences: ```json ... ```, ``` ... ```, or bare JSON.
 const FENCE_RE = /^\s*```(?:json)?\s*\n?([\s\S]*?)\n?\s*```\s*$/;
 
