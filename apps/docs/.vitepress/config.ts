@@ -19,6 +19,7 @@ export default defineConfig({
       { text: "Guide", link: "/getting-started" },
       { text: "API", link: "/api/client" },
       { text: "Protocol", link: "/protocol/overview" },
+      { text: "Claude Skill", link: "/guides/claude-code-skill" },
       { text: "npm", link: "https://www.npmjs.com/package/@pivanov/claude-wire" },
     ],
 
@@ -48,6 +49,12 @@ export default defineConfig({
           { text: "Tool Handling", link: "/guides/tool-handling" },
           { text: "Cost Tracking", link: "/guides/cost-tracking" },
           { text: "Examples", link: "/guides/examples" },
+        ],
+      },
+      {
+        text: "Integrations",
+        items: [
+          { text: "Claude Code Skill (/ask-json)", link: "/guides/claude-code-skill" },
         ],
       },
       {

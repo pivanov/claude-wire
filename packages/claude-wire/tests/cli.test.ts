@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createMockProcess, type TMockProcess } from "./helpers/mock-process.js";
 
 const jsonAnswer = '{"ok":true,"answer":"hello"}';
@@ -258,5 +259,28 @@ describe("cli runCli", () => {
 
     const payload = JSON.parse(capture.stdout.trim());
     expect(payload).toHaveProperty("data");
+  });
+
+  // Regression: 0.1.4 shipped with `import.meta.url === file://${process.argv[1]}`
+  // as the entry guard, which silently no-ops when invoked through the symlink
+  // that `npm`/`bun` creates at `node_modules/.bin/claude-wire`. The fix is
+  // `import.meta.main`. This test spawns the source through a symlink to make
+  // sure the guard keeps firing under symlink invocation.
+  test("entry guard fires when the binary is invoked via a symlink", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = resolve(here, "../src/cli.ts");
+    const tmp = mkdtempSync(join(tmpdir(), "cw-bin-"));
+    const symlink = join(tmp, "claude-wire");
+
+    try {
+      symlinkSync(source, symlink);
+      const result = Bun.spawnSync({ cmd: ["bun", symlink, "--version"] });
+      const stdout = new TextDecoder().decode(result.stdout).trim();
+
+      expect(result.exitCode).toBe(0);
+      expect(stdout).toMatch(/^\d+\.\d+\.\d+$/);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

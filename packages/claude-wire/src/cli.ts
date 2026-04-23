@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -271,7 +271,20 @@ const runAndExit = async (): Promise<void> => {
   }
 };
 
+// Symlink-safe entry detection. argv[1] is the symlink path created by npm/bun
+// in `node_modules/.bin/claude-wire`; import.meta.url is the real target. A
+// naive equality check misses that case. `realpathSync` collapses both to the
+// same canonical path so the guard fires whether the user runs the binary
+// directly, through the bin symlink, or via npx/bunx. `import.meta.main` would
+// also work but only on Node >= 20.11 / >= 22, and we don't want the CLI to
+// silently no-op on older Node installs.
 const entry = process.argv[1];
-if (entry && import.meta.url === `file://${entry}`) {
-  void runAndExit();
+if (entry) {
+  try {
+    if (realpathSync(entry) === fileURLToPath(import.meta.url)) {
+      void runAndExit();
+    }
+  } catch {
+    // argv[1] points to a path that doesn't exist -- skip auto-run.
+  }
 }
