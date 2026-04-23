@@ -3,7 +3,7 @@ layout: home
 hero:
   name: claude-wire
   text: Run Claude Code programmatically
-  tagline: Typed SDK for spawning, streaming, and controlling the CLI. <br />Zero dependencies. ~28 kB.
+  tagline: Typed SDK for spawning, streaming, and controlling the CLI. <br />Zero dependencies. ~22 kB gzipped.
   image:
     light: /hero-code.svg
     dark: /hero-code.svg
