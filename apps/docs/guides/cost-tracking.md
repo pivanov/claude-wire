@@ -89,9 +89,10 @@ const tracker = createCostTracker({
   onCostUpdate: (snap) => console.log(snap),
 });
 
-tracker.update(0.05, 1000, 50);   // costUsd, inputTokens, outputTokens
-tracker.checkBudget();              // throws if over limit
-console.log(tracker.snapshot());    // { totalUsd, tokens: { input, output } }
+tracker.update(0.05, 1000, 50);           // totalCostUsd, totalInputTokens, totalOutputTokens
+tracker.update(0.08, 2000, 100, 500, 0); // ...optional cacheReadTokens, cacheCreationTokens
+tracker.checkBudget();                     // throws if over limit
+console.log(tracker.snapshot());           // { totalUsd, tokens: { input, output, cacheRead?, cacheCreation? } }
 tracker.reset();                    // zero everything
 ```
 

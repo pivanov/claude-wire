@@ -130,10 +130,10 @@ Recognized patterns:
 
 | Code | Matches |
 |------|---------|
-| `rate-limit` | `rate limit`, `429`, `too many requests` |
+| `rate-limit` | `rate[_ -]?limit`, `429`, `too many requests` |
 | `overloaded` | `overloaded`, `529`, `temporarily unavailable` |
-| `context-length-exceeded` | `context length`, `context window`, `too long`, `maximum.*tokens` |
-| `invalid-json-schema` | `invalid.*json schema`, `schema.*invalid`, `json.*schema.*error` |
+| `context-length-exceeded` | `context[_ -]?length`, `context[_ -]?window`, `too long`, `maximum.*tokens` |
+| `invalid-json-schema` | `invalid.*json[_ -]?schema`, `schema.*invalid`, `json.*schema.*error` |
 | `mcp-error` | `mcp.*error`, `mcp.*fail`, `mcp.*server` |
 | `not-authenticated` | `not authenticated`, `authentication`, `unauthorized`, `401` |
 | `permission-denied` | `permission denied`, `forbidden`, `403` |
@@ -174,9 +174,8 @@ if (isTransientError(error)) {
 }
 ```
 
-Matches:
+Detection works differently depending on error type:
 
-- **Network / DNS:** `ECONNREFUSED`, `ECONNRESET`, `ECONNABORTED`, `ETIMEDOUT`, `ENETUNREACH`, `EHOSTUNREACH`, `EAI_AGAIN`, `network error`, `network timeout`, `fetch failed`, `socket hang up`
-- **Pipe / signal:** `EPIPE`, `SIGPIPE`, `broken pipe`
-- **Anthropic overload:** `overloaded_error` (the CLI bubbles up 529 responses verbatim)
-- **Process exit codes:** `137` (SIGKILL / OOM), `141` (SIGPIPE), `143` (SIGTERM)
+- **`ProcessError`** -- only the exit code is checked against `137` (SIGKILL/OOM), `141` (SIGPIPE), `143` (SIGTERM). The error message is not tested.
+- **All other errors** -- only the message is tested against these patterns: `ECONNREFUSED`, `ECONNRESET`, `ECONNABORTED`, `ETIMEDOUT`, `ENETUNREACH`, `EHOSTUNREACH`, `EAI_AGAIN`, `network error`, `network timeout`, `fetch failed`, `socket hang up`, `EPIPE`, `SIGPIPE`, `broken pipe`, `overloaded_error`.
+- **Never transient:** `AbortError`, `BudgetExceededError`.
