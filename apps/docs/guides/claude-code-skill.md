@@ -2,7 +2,7 @@
 
 `claude-wire` ships with a companion [Claude Code](https://claude.ai/download) skill, [`ask-json`](https://github.com/pivanov/ai-skills/tree/main/skills/ask-json), that teaches the main Claude agent to delegate "give me typed JSON" work to the CLI as a cheap sub-agent.
 
-When the main Claude is about to call `Agent` / `Task` and then regex-parse JSON out of a prose response, the skill redirects it to `npx @pivanov/claude-wire@^0.1.5 ask-json` instead. The call returns schema-validated JSON that main Claude can `JSON.parse` and act on immediately -- no prompt-engineering the output format, no prose parsing.
+When the main Claude is about to call `Agent` / `Task` and then regex-parse JSON out of a prose response, the skill redirects it to `npx @pivanov/claude-wire@^0.1.6 ask-json` instead. The call returns schema-validated JSON that main Claude can `JSON.parse` and act on immediately -- no prompt-engineering the output format, no prose parsing.
 
 ## Installation
 
@@ -61,7 +61,7 @@ cat > /tmp/triage.json <<'EOF'
 }
 EOF
 
-npx @pivanov/claude-wire@^0.1.5 ask-json \
+npx @pivanov/claude-wire@^0.1.6 ask-json \
   --model sonnet \
   --prompt "Triage these incidents: $INCIDENTS" \
   --schema-file /tmp/triage.json
@@ -83,7 +83,7 @@ Power users running dozens-to-hundreds of near-identical extractions can overrid
 
 ## Version pinning
 
-The skill pins `@pivanov/claude-wire@^0.1.5`, the first version with the symlink-safe CLI entry guard. Patches and minors flow through automatically; a future `1.0.0` with a breaking CLI would require a skill update. The CLI surface (flag names, output shape, exit codes) is treated as a stable public contract -- see the [CLI section of the README](https://github.com/pivanov/claude-wire#cli) for the contract.
+The skill pins `@pivanov/claude-wire@^0.1.6`, which carries both the symlink-safe CLI entry guard and the JSON-only-output system prompt default that makes `askJson` reliable across model versions. Patches and minors flow through automatically; a future `1.0.0` with a breaking CLI would require a skill update. The CLI surface (flag names, output shape, exit codes) is treated as a stable public contract -- see the [CLI section of the README](https://github.com/pivanov/claude-wire#cli) for the contract.
 
 ## Troubleshooting
 
