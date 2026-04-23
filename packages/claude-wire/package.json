@@ -13,6 +13,9 @@
       "import": "./dist/index.js"
     }
   },
+  "bin": {
+    "claude-wire": "./dist/cli.js"
+  },
   "files": [
     "dist",
     "LICENSE",
@@ -47,7 +50,7 @@
     "async-iterable"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && chmod +x ./dist/cli.js",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "knip": "knip-bun",

@@ -43,6 +43,26 @@ Requires [Claude Code CLI](https://claude.ai/download) installed and authenticat
 
 > This SDK wraps Claude Code's `--output-format stream-json` protocol, which is not officially documented by Anthropic and may change between releases.
 
+## CLI
+
+`claude-wire` ships a minimal CLI for shell-driven JSON extraction. Same engine as `claude.askJson()`, no JS required.
+
+```bash
+npx @pivanov/claude-wire ask-json \
+  --prompt "Extract name and age from: Alice is 30" \
+  --schema '{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"number"}}}'
+```
+
+Pipe the prompt via stdin and read the schema from a file:
+
+```bash
+echo "Summarize this" | npx @pivanov/claude-wire ask-json \
+  --schema-file ./schema.json \
+  --model haiku
+```
+
+Success emits a single JSON line on stdout (`{ data, costUsd, tokens, durationMs, sessionId }`). Errors go to stderr as `{ error, code }` with exit codes `1` (json-validation), `2` (process), `3` (budget-exceeded), `4` (invalid-args). Run `npx @pivanov/claude-wire --help` for the full flag list.
+
 ## Documentation
 
 Full docs, API reference, and protocol guide at **[pivanov.github.io/claude-wire](https://pivanov.github.io/claude-wire/)**
