@@ -22,6 +22,9 @@ export type TCostSnapshot = {
 
 export type TAskResult = {
   text: string;
+  // Empty string when no thinking blocks were emitted (effort/model dependent),
+  // not undefined, so callers can concatenate without null-checks.
+  thinking: string;
   costUsd: number;
   tokens: TTokens;
   // Undefined when the CLI closed stdout without sending a `turn_complete`

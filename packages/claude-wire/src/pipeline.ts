@@ -3,7 +3,7 @@ import type { IClaudeProcess, ISpawnOptions } from "./process.js";
 import { safeWrite, spawnClaude } from "./process.js";
 import { drainStderr, type IStderrDrain } from "./reader.js";
 import type { IToolHandlerInstance, TToolDecision } from "./tools/handler.js";
-import type { TRelayEvent, TTextEvent, TToolUseEvent, TTurnCompleteEvent } from "./types/events.js";
+import type { TRelayEvent, TTextEvent, TThinkingEvent, TToolUseEvent, TTurnCompleteEvent } from "./types/events.js";
 import type { TAskResult, TCostSnapshot } from "./types/results.js";
 import type { TWarn } from "./warnings.js";
 import { createWarn } from "./warnings.js";
@@ -28,7 +28,7 @@ export const startPipeline = (options: ISpawnOptions): IPipeline => {
   // structurally a superset of Bun's (it adds a `readMany` method), so
   // without this the dual-runtime abstraction in runtime.ts fails to unify.
   const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array>;
-  const stderr = drainStderr(proc);
+  const stderr = drainStderr(proc, options.onWarning);
   return { proc, reader, stderr };
 };
 
@@ -86,12 +86,20 @@ export const extractText = (events: TRelayEvent[]): string => {
     .join("");
 };
 
+export const extractThinking = (events: TRelayEvent[]): string => {
+  return events
+    .filter((e): e is TThinkingEvent => e.type === "thinking")
+    .map((e) => e.content)
+    .join("");
+};
+
 export const buildResult = (events: TRelayEvent[], costTracker: ICostTracker, sessionId: string | undefined): TAskResult => {
   const tc = events.findLast((e): e is TTurnCompleteEvent => e.type === "turn_complete");
   const snap = costTracker.snapshot();
 
   return {
     text: extractText(events),
+    thinking: extractThinking(events),
     costUsd: snap.totalUsd,
     tokens: snap.tokens,
     duration: tc?.durationMs,

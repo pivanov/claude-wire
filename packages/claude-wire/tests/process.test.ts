@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { buildArgs, buildSpawnEnv } from "@/process.js";
+import { isKnownError } from "@/errors.js";
+import { buildArgs, buildSpawnEnv, spawnClaude } from "@/process.js";
 
 describe("buildArgs", () => {
   const binary = "/usr/local/bin/claude";
@@ -195,5 +196,17 @@ describe("buildSpawnEnv", () => {
     });
     expect(env?.ANTHROPIC_API_KEY).toBe("sk-test");
     expect(env?.DEBUG).toBe("1");
+  });
+});
+
+describe("spawnClaude validation", () => {
+  test("rejects conflicting resume + continueSession with KnownError('invalid-options')", () => {
+    try {
+      spawnClaude({ resume: "sess-1", continueSession: true });
+      throw new Error("expected spawnClaude to throw");
+    } catch (err) {
+      expect(isKnownError(err)).toBe(true);
+      expect((err as { code: string }).code).toBe("invalid-options");
+    }
   });
 });

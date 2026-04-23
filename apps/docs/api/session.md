@@ -50,6 +50,7 @@ async function handleRequest(req) {
 | Option | Type | Description |
 |--------|------|-------------|
 | `onRetry` | `(attempt: number, error: unknown) => void` | Per-ask retry observer. Fires alongside the session-level `onRetry` when both are set. |
+| `onCostUpdate` | `(cost: TCostSnapshot) => void` | Per-ask cost observer. Fires once after `turn_complete` with the session's cumulative snapshot. Composes with the session-level `onCostUpdate`; use this for request-scoped metadata (request id, tenant, trace span). |
 | `signal` | `AbortSignal` | Per-ask abort. Aborts this ask only (session stays alive). Composes with the session-level signal -- either firing aborts the ask. |
 
 ## `session.askJson(prompt, schema, options?)`
@@ -151,7 +152,19 @@ Use `onWarning` from `IClaudeOptions` to route library-emitted warnings (user ca
 
 ## Turn Limits
 
-After 100 turns, the session pre-emptively kills and respawns the process to prevent context window overflow. This is transparent to the caller.
+After 100 turns, the session pre-emptively kills and respawns the process to prevent context window overflow. This is transparent to the caller -- the next `ask()` spawns a fresh process and resumes by `sessionId` when one is known.
+
+Pass `onRecycle` on `ISessionOptions` to observe the transition (emit metrics, warm a replacement pool, log the event):
+
+```ts
+const session = claude.session({
+  onRecycle: (reason) => {
+    metrics.increment("claude_wire.session.recycle", { reason });
+  },
+});
+```
+
+Today only `"turn-limit"` is emitted; the type is widened with `(string & {})` so future reasons (e.g. budget-triggered respawn) can be added without a breaking change.
 
 ## AbortSignal Support
 

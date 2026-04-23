@@ -18,6 +18,7 @@ const result = await claude.ask("Fix the bug in main.ts", {
 ```ts
 type TAskResult = {
   text: string;                        // concatenated text output
+  thinking: string;                    // concatenated thinking content (empty when none emitted)
   costUsd: number;                     // total cost in USD
   tokens: {
     input: number;                     // total input (base + cache read + cache creation)

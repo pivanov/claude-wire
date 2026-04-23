@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { LIMITS } from "@/constants.js";
 import { AbortError, ClaudeError, TimeoutError } from "@/errors.js";
 import { createTranslator } from "@/parser/translator.js";
-import { drainStderr, readNdjsonEvents } from "@/reader.js";
+import { drainStderr, readNdjsonEvents, STDERR_MAX_BYTES } from "@/reader.js";
 import type { TRelayEvent } from "@/types/events.js";
 
 const makeReader = (lines: string[]): ReadableStreamDefaultReader<Uint8Array> => {
@@ -144,6 +144,66 @@ describe("drainStderr", () => {
     const drain = drainStderr({ stderr });
     await drain.done;
     expect(drain.chunks).toEqual([]);
+  });
+
+  test("fires onWarning once when stderr exceeds cap and drops overflow", async () => {
+    const encoder = new TextEncoder();
+    // Two-thirds of the cap each: second chunk trips it, third is dropped.
+    const bigChunk = "a".repeat(Math.floor((STDERR_MAX_BYTES * 2) / 3));
+
+    const stderr = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(bigChunk));
+        controller.enqueue(encoder.encode(bigChunk));
+        controller.enqueue(encoder.encode(bigChunk));
+        controller.close();
+      },
+    });
+
+    const warnings: string[] = [];
+    const drain = drainStderr({ stderr }, (msg) => warnings.push(msg));
+    await drain.done;
+
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain("stderr exceeded");
+    // First chunk fits; second + third trip the cap and are dropped.
+    expect(drain.chunks.length).toBe(1);
+  });
+
+  test("does not warn when stderr stays within the cap", async () => {
+    const encoder = new TextEncoder();
+    const stderr = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("short message"));
+        controller.close();
+      },
+    });
+
+    const warnings: string[] = [];
+    const drain = drainStderr({ stderr }, (msg) => warnings.push(msg));
+    await drain.done;
+
+    expect(warnings).toEqual([]);
+  });
+
+  test("swallows observer errors without killing the drain", async () => {
+    const encoder = new TextEncoder();
+    const bigChunk = "x".repeat(Math.floor((STDERR_MAX_BYTES * 2) / 3));
+
+    const stderr = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(bigChunk));
+        controller.enqueue(encoder.encode(bigChunk));
+        controller.close();
+      },
+    });
+
+    const drain = drainStderr({ stderr }, () => {
+      throw new Error("observer boom");
+    });
+    await drain.done;
+
+    expect(drain.chunks.length).toBe(1);
   });
 });
 

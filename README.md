@@ -69,7 +69,7 @@ apps/examples/          interactive example runner
 
 ```bash
 bun install
-bun run test        # 267 tests
+bun run test        # 279 tests
 bun run typecheck
 bun run lint
 bun run docs:dev    # local docs server

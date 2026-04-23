@@ -30,11 +30,12 @@ export interface IStderrDrain {
 }
 
 // Cap accumulated stderr at 1MB to bound memory on verbose CLI builds.
-const STDERR_MAX_BYTES = 1024 * 1024;
+export const STDERR_MAX_BYTES = 1024 * 1024;
 
-export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): IStderrDrain => {
+export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }, onWarning?: TWarn): IStderrDrain => {
   const chunks: string[] = [];
   let totalLen = 0;
+  let truncationWarned = false;
   const stderrReader = proc.stderr.getReader();
   const decoder = new TextDecoder();
   const done = (async () => {
@@ -48,6 +49,17 @@ export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }): IStde
         totalLen += text.length;
         if (totalLen <= STDERR_MAX_BYTES) {
           chunks.push(text);
+        } else if (!truncationWarned) {
+          truncationWarned = true;
+          // Skipping createWarn's console.warn default -- noisy CLI builds
+          // would spam every drain. Opt-in only via explicit onWarning.
+          if (onWarning) {
+            try {
+              onWarning(`stderr exceeded ${STDERR_MAX_BYTES} bytes; subsequent output dropped`);
+            } catch {
+              // observer threw -- drain must not die
+            }
+          }
         }
       }
     } catch {

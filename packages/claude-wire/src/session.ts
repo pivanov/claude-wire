@@ -281,6 +281,14 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     consecutiveCrashes = 0;
     turnCount++;
 
+    if (askOpts?.onCostUpdate) {
+      try {
+        askOpts.onCostUpdate(costTracker.snapshot());
+      } catch {
+        // observer threw -- ask still returns normally
+      }
+    }
+
     if (turnCount >= LIMITS.sessionMaxTurnsBeforeRecycle) {
       if (proc) {
         await gracefulKill(proc);
@@ -289,6 +297,13 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       cleanupProcess();
       turnCount = 0;
       consecutiveCrashes = 0;
+      if (options.onRecycle) {
+        try {
+          options.onRecycle("turn-limit");
+        } catch {
+          // observer threw -- recycle already happened, ignore
+        }
+      }
     }
 
     return buildResult(events, costTracker, currentSessionId);

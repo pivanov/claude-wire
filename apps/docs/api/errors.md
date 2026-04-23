@@ -94,11 +94,13 @@ try {
 ```
 
 **Properties:**
-- `code: TKnownErrorCode` - one of: `"not-authenticated"`, `"binary-not-found"`, `"permission-denied"`, `"retry-exhausted"`, `"rate-limit"`, `"overloaded"`, `"context-length-exceeded"`, `"invalid-json-schema"`, `"mcp-error"`
+- `code: TKnownErrorCode` - one of: `"not-authenticated"`, `"binary-not-found"`, `"permission-denied"`, `"retry-exhausted"`, `"invalid-options"`, `"rate-limit"`, `"overloaded"`, `"context-length-exceeded"`, `"invalid-json-schema"`, `"mcp-error"`
 
 The last five codes are auto-classified from stderr by `classifyStderr()` -- when a `ProcessError` is about to be thrown and stderr matches a known pattern, it is promoted to a `KnownError` with the appropriate code instead.
 
 The `retry-exhausted` code is thrown by `session.ask()` when the respawn budget (`LIMITS.maxRespawnAttempts`, currently 3) has been used up by consecutive transient failures. The session is marked closed and any further `ask()` call rejects with `ClaudeError("Session is closed")`.
+
+The `invalid-options` code is thrown synchronously by `spawnClaude()` when caller options conflict -- currently when both `resume` and `continueSession` are set. No process is spawned; the error surfaces before any CLI work happens.
 
 ```ts
 import { isKnownError } from "@pivanov/claude-wire";

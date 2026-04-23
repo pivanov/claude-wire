@@ -337,4 +337,95 @@ describe("createSession", () => {
 
     await expect(session.ask("another")).rejects.toThrow("Session is closed");
   });
+
+  test("per-ask onCostUpdate fires alongside session-level observer", async () => {
+    const sessionLevel: import("@/types/results.js").TCostSnapshot[] = [];
+    const perAsk: import("@/types/results.js").TCostSnapshot[] = [];
+
+    const createSession = await loadCreateSession();
+    const session = createSession({
+      maxBudgetUsd: 5,
+      onCostUpdate: (cost) => sessionLevel.push({ ...cost }),
+    });
+
+    await session.ask("fix the bug", {
+      onCostUpdate: (cost) => perAsk.push({ ...cost }),
+    });
+
+    // Both observers fire exactly once per turn_complete for a single-turn ask.
+    expect(sessionLevel.length).toBe(1);
+    expect(perAsk.length).toBe(1);
+    // Both see the same cumulative snapshot at turn-complete time.
+    expect(perAsk[0]!.totalUsd).toBe(sessionLevel[0]!.totalUsd);
+
+    await session.close();
+  });
+
+  test("per-ask onCostUpdate swallows observer errors", async () => {
+    const createSession = await loadCreateSession();
+    const session = createSession({ maxBudgetUsd: 5 });
+
+    const result = await session.ask("fix the bug", {
+      onCostUpdate: () => {
+        throw new Error("observer boom");
+      },
+    });
+
+    // Ask still resolves normally -- observer throw must not reach the caller.
+    expect(result.text).toContain("Fixed!");
+
+    await session.close();
+  });
+
+  test("onRecycle fires with 'turn-limit' reason when the turn counter hits the threshold", async () => {
+    const { LIMITS, TIMEOUTS } = await import("@/constants.js");
+    const originalLimit = LIMITS.sessionMaxTurnsBeforeRecycle;
+    const originalGrace = TIMEOUTS.gracefulExitMs;
+    (LIMITS as { sessionMaxTurnsBeforeRecycle: number }).sessionMaxTurnsBeforeRecycle = 1;
+    (TIMEOUTS as { gracefulExitMs: number }).gracefulExitMs = 50;
+
+    try {
+      const recycleReasons: string[] = [];
+      const createSession = await loadCreateSession();
+      const session = createSession({
+        maxBudgetUsd: 5,
+        onRecycle: (reason) => recycleReasons.push(reason),
+      });
+
+      await session.ask("fix the bug");
+
+      expect(recycleReasons).toEqual(["turn-limit"]);
+
+      await session.close();
+    } finally {
+      (LIMITS as { sessionMaxTurnsBeforeRecycle: number }).sessionMaxTurnsBeforeRecycle = originalLimit;
+      (TIMEOUTS as { gracefulExitMs: number }).gracefulExitMs = originalGrace;
+    }
+  });
+
+  test("onRecycle swallows observer errors", async () => {
+    const { LIMITS, TIMEOUTS } = await import("@/constants.js");
+    const originalLimit = LIMITS.sessionMaxTurnsBeforeRecycle;
+    const originalGrace = TIMEOUTS.gracefulExitMs;
+    (LIMITS as { sessionMaxTurnsBeforeRecycle: number }).sessionMaxTurnsBeforeRecycle = 1;
+    (TIMEOUTS as { gracefulExitMs: number }).gracefulExitMs = 50;
+
+    try {
+      const createSession = await loadCreateSession();
+      const session = createSession({
+        maxBudgetUsd: 5,
+        onRecycle: () => {
+          throw new Error("recycle boom");
+        },
+      });
+
+      const result = await session.ask("fix the bug");
+      expect(result.text).toContain("Fixed!");
+
+      await session.close();
+    } finally {
+      (LIMITS as { sessionMaxTurnsBeforeRecycle: number }).sessionMaxTurnsBeforeRecycle = originalLimit;
+      (TIMEOUTS as { gracefulExitMs: number }).gracefulExitMs = originalGrace;
+    }
+  });
 });

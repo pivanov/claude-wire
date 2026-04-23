@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { createCostTracker } from "@/cost.js";
-import { applyTurnComplete, buildResult, dispatchToolDecision, extractText } from "@/pipeline.js";
+import { applyTurnComplete, buildResult, dispatchToolDecision, extractText, extractThinking } from "@/pipeline.js";
 import type { IClaudeProcess } from "@/process.js";
 import type { IToolHandlerInstance } from "@/tools/handler.js";
 import type { TRelayEvent, TToolUseEvent } from "@/types/events.js";
@@ -26,9 +26,31 @@ describe("extractText", () => {
   });
 });
 
+describe("extractThinking", () => {
+  test("joins thinking events, skipping text/tool events", () => {
+    const events: TRelayEvent[] = [
+      { type: "thinking", content: "step 1: " },
+      { type: "text", content: "visible answer" },
+      { type: "thinking", content: "step 2" },
+      { type: "turn_complete" },
+    ];
+    expect(extractThinking(events)).toBe("step 1: step 2");
+  });
+
+  test("returns empty string when no thinking events present", () => {
+    const events: TRelayEvent[] = [{ type: "text", content: "hi" }];
+    expect(extractThinking(events)).toBe("");
+  });
+
+  test("returns empty string for empty array", () => {
+    expect(extractThinking([])).toBe("");
+  });
+});
+
 describe("buildResult", () => {
   test("builds TAskResult from events", () => {
     const events: TRelayEvent[] = [
+      { type: "thinking", content: "pondering" },
       { type: "text", content: "answer" },
       { type: "turn_complete", costUsd: 0.01, inputTokens: 100, outputTokens: 20, durationMs: 500 },
     ];
@@ -37,11 +59,19 @@ describe("buildResult", () => {
 
     const result = buildResult(events, tracker, "sess-1");
     expect(result.text).toBe("answer");
+    expect(result.thinking).toBe("pondering");
     expect(result.costUsd).toBe(0.01);
     expect(result.tokens).toEqual({ input: 100, output: 20 });
     expect(result.duration).toBe(500);
     expect(result.sessionId).toBe("sess-1");
-    expect(result.events).toHaveLength(2);
+    expect(result.events).toHaveLength(3);
+  });
+
+  test("thinking defaults to empty string when no thinking events", () => {
+    const events: TRelayEvent[] = [{ type: "text", content: "just text" }, { type: "turn_complete" }];
+    const tracker = createCostTracker();
+    const result = buildResult(events, tracker, undefined);
+    expect(result.thinking).toBe("");
   });
 
   test("handles missing turn_complete gracefully", () => {

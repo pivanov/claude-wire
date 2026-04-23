@@ -47,6 +47,8 @@ export const KNOWN_ERROR_CODES = [
   "binary-not-found",
   "permission-denied",
   "retry-exhausted",
+  // Upfront option validation (before spawn).
+  "invalid-options",
   // Classified from stderr by classifyStderr (src/stderr.ts):
   "rate-limit",
   "overloaded",

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BINARY } from "./constants.js";
-import { ClaudeError, errorMessage, KnownError, ProcessError } from "./errors.js";
+import { errorMessage, KnownError, ProcessError } from "./errors.js";
 import { isExecutableNonEmpty, spawnProcess, whichSync } from "./runtime.js";
 import type { IClaudeOptions } from "./types/options.js";
 import { assertPositiveNumber } from "./validation.js";
@@ -222,7 +222,7 @@ export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
   // Catch mutually exclusive session flags early. The CLI's behavior with
   // conflicting combinations is undefined and version-dependent.
   if (options.resume && options.continueSession) {
-    throw new ClaudeError("Cannot set both 'resume' and 'continueSession' -- use one or the other");
+    throw new KnownError("invalid-options", "Cannot set both 'resume' and 'continueSession' -- use one or the other");
   }
   const resolved = resolve();
   const args = buildArgs(options, resolved.binaryPath);
