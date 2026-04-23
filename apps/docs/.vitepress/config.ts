@@ -53,9 +53,7 @@ export default defineConfig({
       },
       {
         text: "Integrations",
-        items: [
-          { text: "Claude Code Skill (/ask-json)", link: "/guides/claude-code-skill" },
-        ],
+        items: [{ text: "Claude Code Skill (/ask-json)", link: "/guides/claude-code-skill" }],
       },
       {
         text: "Protocol Reference",
