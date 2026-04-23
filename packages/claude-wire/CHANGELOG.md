@@ -1,5 +1,11 @@
 # @pivanov/claude-wire
 
+## 0.1.4
+
+### Patch Changes
+
+- 5d9c00b: Add `claude-wire` CLI binary with an `ask-json` subcommand. Supports `--prompt`, `--schema`/`--schema-file`, `--model`, `--max-budget-usd`, and `--system-prompt`. Reads prompt from stdin when `--prompt` is omitted. Emits a single JSON line on stdout and structured JSON errors on stderr with distinct exit codes for validation (1), process (2), budget (3), and argument (4) failures. Additive: no changes to the JS API.
+
 ## 0.1.3
 
 ### Patch Changes
