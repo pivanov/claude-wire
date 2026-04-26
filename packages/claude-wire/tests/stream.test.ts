@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { join } from "node:path";
 import { createMockProcess, createMultiTurnMockProcess, loadFixtureLines, type TMockProcess } from "./helpers/mock-process.js";
+import { realProcessModule } from "./helpers/real-process.js";
 
 const FIXTURE_DIR = join(import.meta.dir, "fixtures");
 const singleTurnLines = loadFixtureLines(join(FIXTURE_DIR, "single-turn.ndjson"));
@@ -10,8 +11,13 @@ let mockProc: TMockProcess;
 beforeEach(() => {
   mockProc = createMockProcess(singleTurnLines);
   mock.module("@/process.js", () => ({
+    ...realProcessModule,
     spawnClaude: () => mockProc,
   }));
+});
+
+afterAll(() => {
+  mock.module("@/process.js", () => realProcessModule);
 });
 
 // Dynamic import so the mocked module is picked up
@@ -111,6 +117,7 @@ describe("createStream", () => {
   test("tool dispatch writes approve to stdin for approved tools", async () => {
     mockProc = createMockProcess(singleTurnLines);
     mock.module("@/process.js", () => ({
+      ...realProcessModule,
       spawnClaude: () => mockProc,
     }));
 
@@ -149,6 +156,7 @@ describe("createStream", () => {
   test("tool dispatch writes deny to stdin for blocked tools", async () => {
     mockProc = createMockProcess(singleTurnLines);
     mock.module("@/process.js", () => ({
+      ...realProcessModule,
       spawnClaude: () => mockProc,
     }));
 
@@ -195,6 +203,7 @@ describe("createStream", () => {
   test("process is killed on completion", async () => {
     mockProc = createMockProcess(singleTurnLines);
     mock.module("@/process.js", () => ({
+      ...realProcessModule,
       spawnClaude: () => mockProc,
     }));
 
@@ -235,6 +244,7 @@ describe("createStream", () => {
     multiProc.emitLines([firstEvent]);
 
     mock.module("@/process.js", () => ({
+      ...realProcessModule,
       spawnClaude: () => multiProc,
     }));
 
@@ -278,6 +288,7 @@ describe("createStream", () => {
     const multiAgentLines = loadFixtureLines(join(FIXTURE_DIR, "multi-agent.ndjson"));
     mockProc = createMockProcess(multiAgentLines);
     mock.module("@/process.js", () => ({
+      ...realProcessModule,
       spawnClaude: () => mockProc,
     }));
 

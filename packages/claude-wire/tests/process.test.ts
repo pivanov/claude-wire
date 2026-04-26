@@ -1,6 +1,22 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { isKnownError } from "@/errors.js";
-import { buildArgs, buildSpawnEnv, spawnClaude } from "@/process.js";
+import { realProcessModule } from "./helpers/real-process.js";
+
+// Sibling test files (client/cli/session/stream) install global mock.module
+// overrides for "@/process.js" that bun does not auto-restore between files.
+// Force the real module back before binding any exports so this file is
+// independent of test ordering on CI.
+let buildArgs: typeof import("@/process.js").buildArgs;
+let buildSpawnEnv: typeof import("@/process.js").buildSpawnEnv;
+let spawnClaude: typeof import("@/process.js").spawnClaude;
+
+beforeAll(async () => {
+  mock.module("@/process.js", () => ({ ...realProcessModule }));
+  const real = await import("@/process.js");
+  buildArgs = real.buildArgs;
+  buildSpawnEnv = real.buildSpawnEnv;
+  spawnClaude = real.spawnClaude;
+});
 
 describe("buildArgs", () => {
   const binary = "/usr/local/bin/claude";

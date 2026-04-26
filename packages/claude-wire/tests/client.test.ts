@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_JSON_SYSTEM_PROMPT } from "@/json.js";
 import { createMockProcess, type TMockProcess } from "./helpers/mock-process.js";
+import { realProcessModule } from "./helpers/real-process.js";
 
 const jsonLines = [
   '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-sonnet-4-6","tools":[]}',
@@ -15,23 +16,17 @@ beforeEach(() => {
   mockProc = createMockProcess(jsonLines);
   spawnedWith = undefined;
   mock.module("@/process.js", () => ({
+    ...realProcessModule,
     spawnClaude: (options: unknown) => {
       spawnedWith = { options };
       return mockProc;
     },
-    safeKill: () => {},
-    safeWrite: (proc: { write: (msg: string) => void }, line: string) => {
-      try {
-        proc.write(line);
-        return true;
-      } catch {
-        return false;
-      }
-    },
     buildArgs: () => [],
-    buildSpawnEnv: () => ({}),
-    resetResolvedEnvCache: () => {},
   }));
+});
+
+afterAll(() => {
+  mock.module("@/process.js", () => realProcessModule);
 });
 
 const loadClient = async () => {

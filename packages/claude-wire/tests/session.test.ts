@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { join } from "node:path";
 import {
   createMockProcess,
@@ -7,6 +7,7 @@ import {
   type TMockProcess,
   type TMultiTurnMockProcess,
 } from "./helpers/mock-process.js";
+import { realProcessModule } from "./helpers/real-process.js";
 
 const FIXTURE_DIR = join(import.meta.dir, "fixtures");
 const singleTurnLines = loadFixtureLines(join(FIXTURE_DIR, "single-turn.ndjson"));
@@ -20,14 +21,18 @@ beforeEach(() => {
   procFactory = () => createMockProcess(singleTurnLines);
 
   mock.module("@/process.js", () => ({
+    ...realProcessModule,
     spawnClaude: () => {
       spawnCount++;
       lastMockProc = procFactory();
       return lastMockProc;
     },
     buildArgs: () => [],
-    resetResolvedEnvCache: () => {},
   }));
+});
+
+afterAll(() => {
+  mock.module("@/process.js", () => realProcessModule);
 });
 
 const loadCreateSession = async () => {

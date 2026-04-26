@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMockProcess, type TMockProcess } from "./helpers/mock-process.js";
+import { realProcessModule } from "./helpers/real-process.js";
 
 const jsonAnswer = '{"ok":true,"answer":"hello"}';
 const jsonFixtureLines = [
@@ -17,20 +18,14 @@ let mockProc: TMockProcess;
 beforeEach(() => {
   mockProc = createMockProcess(jsonFixtureLines);
   mock.module("@/process.js", () => ({
+    ...realProcessModule,
     spawnClaude: () => mockProc,
-    safeKill: () => {},
-    safeWrite: (proc: { write: (msg: string) => void }, line: string) => {
-      try {
-        proc.write(line);
-        return true;
-      } catch {
-        return false;
-      }
-    },
     buildArgs: () => [],
-    buildSpawnEnv: () => ({}),
-    resetResolvedEnvCache: () => {},
   }));
+});
+
+afterAll(() => {
+  mock.module("@/process.js", () => realProcessModule);
 });
 
 const loadCli = async () => {
