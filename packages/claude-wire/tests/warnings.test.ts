@@ -26,13 +26,13 @@ describe("createWarn", () => {
     expect(calls).toEqual([{ message: "custom warning", cause: 42 }]);
   });
 
-  test("falls back to console.warn when onWarning throws", () => {
+  test("swallows when onWarning throws (does not pollute console)", () => {
     const spy = spyOn(console, "warn").mockImplementation(() => {});
     const warn = createWarn(() => {
       throw new Error("observer exploded");
     });
-    warn("should not crash");
-    expect(spy).toHaveBeenCalledWith("[claude-wire] should not crash");
+    expect(() => warn("should not crash")).not.toThrow();
+    expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 });

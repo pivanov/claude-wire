@@ -24,6 +24,7 @@ export type TClaudeContent = {
 };
 
 export type TClaudeMessage = {
+  id?: string;
   content: TClaudeContent[];
   role?: string;
   stop_reason?: string;

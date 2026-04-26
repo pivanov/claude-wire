@@ -26,17 +26,15 @@ export interface IClaudeSession extends AsyncDisposable {
 // Uses the platform `AbortSignal.any`, which owns listener lifetime --
 // the manual two-addEventListener version leaked listeners on the signal
 // that never fired. Available on Node 20.3+ / Bun, both within engines.
-const composeSignals = (a?: AbortSignal, b?: AbortSignal): AbortSignal | undefined => {
-  if (!a && !b) {
+const composeSignals = (...signals: Array<AbortSignal | undefined>): AbortSignal | undefined => {
+  const present = signals.filter((s): s is AbortSignal => s !== undefined);
+  if (present.length === 0) {
     return undefined;
   }
-  if (!a) {
-    return b;
+  if (present.length === 1) {
+    return present[0];
   }
-  if (!b) {
-    return a;
-  }
-  return AbortSignal.any([a, b]);
+  return AbortSignal.any(present);
 };
 
 // Fire both session-level and per-ask onRetry, swallowing throws from either.
@@ -251,7 +249,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
     }
 
     // Compose per-ask signal with session-level signal: either firing aborts.
-    const effectiveSignal = composeSignals(options.signal, askOpts?.signal);
+    const effectiveSignal = composeSignals(options.signal, askOpts?.signal, closeController.signal);
 
     let events: TRelayEvent[] | undefined;
     while (true) {
@@ -310,6 +308,8 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   };
 
   let closed = false;
+  // Fires on close() so a mid-flight ask blocked in reader.read() bails out instead of waiting on gracefulExitMs.
+  const closeController = new AbortController();
 
   const ask = (prompt: string, askOpts?: IAskOptions): Promise<TAskResult> => {
     if (closed) {
@@ -340,6 +340,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
 
   const close = async (): Promise<void> => {
     closed = true;
+    closeController.abort();
     if (inFlight) {
       // Cap the wait: a stuck reader.read() inside the queued ask would
       // otherwise hang close() forever before gracefulKill gets a chance.

@@ -95,11 +95,11 @@ const translateContentBlock = (block: TClaudeContent): TRelayEvent | undefined =
 
 export const createTranslator = (): ITranslator => {
   let lastContentIndex = 0;
-  let lastFirstBlockKey: string | undefined;
+  let lastMessageKey: string | undefined;
 
   const reset = () => {
     lastContentIndex = 0;
-    lastFirstBlockKey = undefined;
+    lastMessageKey = undefined;
   };
 
   const translate = (raw: TClaudeEvent): TRelayEvent[] => {
@@ -132,11 +132,12 @@ export const createTranslator = (): ITranslator => {
       if (content.length > 0) {
         const firstBlock = content[0];
         if (firstBlock) {
-          const key = blockFingerprint(firstBlock);
-          if (lastFirstBlockKey !== undefined && key !== lastFirstBlockKey) {
+          // Prefer the message id when the CLI provides it; fall back to a first-block fingerprint for older transports that omit ids.
+          const key = raw.message.id ?? blockFingerprint(firstBlock);
+          if (lastMessageKey !== undefined && key !== lastMessageKey) {
             lastContentIndex = 0;
           }
-          lastFirstBlockKey = key;
+          lastMessageKey = key;
         }
       }
 

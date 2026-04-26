@@ -11,7 +11,7 @@ const STDERR_PATTERNS: ReadonlyArray<[RegExp, TKnownErrorCode]> = [
   [/context[_ -]?length|context[_ -]?window|too long|maximum.*tokens/i, "context-length-exceeded"],
   [/invalid.*json[_ -]?schema|schema.*invalid|json.*schema.*error/i, "invalid-json-schema"],
   [/mcp.*error|mcp.*fail|mcp.*server/i, "mcp-error"],
-  [/not authenticated|authentication|unauthorized|401/i, "not-authenticated"],
+  [/not authenticated|authentication failed|invalid api key|unauthorized|\b401\b/i, "not-authenticated"],
   [/permission denied|forbidden|403/i, "permission-denied"],
   [/binary.*not found|command not found|ENOENT.*claude/i, "binary-not-found"],
 ];

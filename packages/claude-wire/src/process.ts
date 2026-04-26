@@ -273,7 +273,7 @@ export const spawnClaude = (options: ISpawnOptions): IClaudeProcess => {
       try {
         rawProc.stdin.write(writer.user(options.prompt));
       } catch {
-        rawProc.kill();
+        safeKill(rawProc);
         throw new ProcessError("Failed to write initial prompt to process");
       }
     }

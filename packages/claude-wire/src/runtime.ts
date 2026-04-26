@@ -104,6 +104,9 @@ const spawnNode = (args: string[], opts: ISpawnOpts): IRawProcess => {
     env: opts.env as NodeJS.ProcessEnv,
   });
 
+  // Async spawn failures (ENOENT/EACCES) emit 'error' on next tick; without an early listener the unhandled event would crash the host EventEmitter-style.
+  child.on("error", () => {});
+
   if (child.pid === undefined) {
     throw new ProcessError(`Failed to spawn ${cmd}: no PID assigned`);
   }

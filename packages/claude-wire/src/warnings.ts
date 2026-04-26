@@ -18,8 +18,7 @@ export const createWarn = (onWarning?: TWarn): TWarn => {
         try {
           onWarning(message, cause);
         } catch {
-          // A user hook that itself throws shouldn't take down the stream.
-          DEFAULT(message, cause);
+          // A throwing user hook is the user's bug; swallow rather than fall back to console.warn and pollute the channel they explicitly routed away from.
         }
       }
     : DEFAULT;

@@ -84,7 +84,6 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
   const { reader, translator, signal } = opts;
   const decoder = new TextDecoder();
   let buffer = "";
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let turnComplete = false;
 
   let abortReject: ((err: Error) => void) | undefined;
@@ -93,14 +92,6 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
   });
   // Swallow unhandled rejection if nothing ever races against this promise.
   abortPromise.catch(() => {});
-
-  // Single resettable timeout shared across all iterations -- avoids leaking
-  // a new Promise + setTimeout per read loop.
-  let timeoutReject: ((err: Error) => void) | undefined;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutReject = reject;
-  });
-  timeoutPromise.catch(() => {});
   // Shared per-raw-event dispatch. Used by both the main read loop and the
   // trailing-buffer flush so the translate → tool-dispatch → yield sequence
   // lives in one place. `!turnComplete` guards dispatch so we don't approve
@@ -118,13 +109,20 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
     }
   };
 
-  const resetReadTimeout = () => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    timeoutId = setTimeout(() => {
-      timeoutReject?.(new TimeoutError(`No data received within ${TIMEOUTS.defaultAbortMs}ms`));
-    }, TIMEOUTS.defaultAbortMs);
+  // Fresh promise per call -- a shared one stays rejected after the first fire and poisons subsequent reads when consumers pause > defaultAbortMs between pulls.
+  const raceWithTimeout = <T>(p: Promise<T>): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new TimeoutError(`No data received within ${TIMEOUTS.defaultAbortMs}ms`));
+      }, TIMEOUTS.defaultAbortMs);
+    });
+    timeoutPromise.catch(() => {});
+    return Promise.race([p, timeoutPromise, abortPromise]).finally(() => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }) as Promise<T>;
   };
 
   const abortHandler = signal
@@ -150,8 +148,7 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
         throw new AbortError();
       }
 
-      resetReadTimeout();
-      const readResult = await Promise.race([reader.read(), timeoutPromise, abortPromise]);
+      const readResult = await raceWithTimeout(reader.read());
 
       const { done, value } = readResult;
       if (done) {
@@ -191,7 +188,6 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
       }
     }
   } finally {
-    clearTimeout(timeoutId);
     if (signal && abortHandler) {
       signal.removeEventListener("abort", abortHandler);
     }

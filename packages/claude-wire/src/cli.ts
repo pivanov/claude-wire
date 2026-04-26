@@ -27,6 +27,8 @@ const readPackageVersion = (): string => {
 
 const PKG_VERSION = readPackageVersion();
 
+const STDIN_MAX_BYTES = 50 * 1024 * 1024;
+
 const USAGE = `claude-wire <command> [options]
 
 Commands:
@@ -75,8 +77,15 @@ const defaultIo = (): ICliIo => ({
   stderr: (text) => process.stderr.write(text),
   readStdin: async () => {
     const chunks: Buffer[] = [];
+    let total = 0;
     for await (const chunk of process.stdin) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buf.length;
+      // Bound to prevent OOM when a large file is accidentally piped in (e.g. cat huge.bin | claude-wire ...).
+      if (total > STDIN_MAX_BYTES) {
+        throw new ClaudeError(`stdin exceeded ${STDIN_MAX_BYTES} bytes`);
+      }
+      chunks.push(buf);
     }
     return Buffer.concat(chunks).toString("utf-8");
   },
