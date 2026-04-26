@@ -137,7 +137,7 @@ Recognized patterns:
 | `context-length-exceeded` | `context[_ -]?length`, `context[_ -]?window`, `too long`, `maximum.*tokens` |
 | `invalid-json-schema` | `invalid.*json[_ -]?schema`, `schema.*invalid`, `json.*schema.*error` |
 | `mcp-error` | `mcp.*error`, `mcp.*fail`, `mcp.*server` |
-| `not-authenticated` | `not authenticated`, `authentication`, `unauthorized`, `401` |
+| `not-authenticated` | `not authenticated`, `authentication failed`, `invalid api key`, `unauthorized`, `\b401\b` |
 | `permission-denied` | `permission denied`, `forbidden`, `403` |
 | `binary-not-found` | `binary.*not found`, `command not found`, `ENOENT.*claude` |
 

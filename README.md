@@ -27,7 +27,7 @@ console.log(result.costUsd);  // 0.0084
 - **Typed errors** - rate-limit, overload, context-length, retry-exhausted as `KnownError` codes
 - **Fully typed** - discriminated union events, full IntelliSense
 - **Resilient** - auto-respawn with backoff, transient error detection, AbortSignal
-- **Zero dependencies** - ~24 kB gzipped (bundle), 34 kB npm tarball
+- **Zero dependencies** - ~23 kB gzipped (bundle), 35 kB npm tarball
 
 ## Install
 
