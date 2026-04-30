@@ -2,6 +2,32 @@
 
 All errors extend `ClaudeError`, which extends the native `Error`. You can catch them specifically or broadly.
 
+## `_tag` Discriminants
+
+Every error class carries a `_tag` literal so consumers can pattern-match without `instanceof`:
+
+```ts
+import type { TClaudeErrorTag } from "@pivanov/claude-wire";
+
+try {
+  await claude.ask("...");
+} catch (error) {
+  if (!(error instanceof Error)) throw error;
+  switch ((error as { _tag?: TClaudeErrorTag })._tag) {
+    case "AgentInactivityError": /* handle hung process */ break;
+    case "BudgetExceededError":  /* handle budget */ break;
+    case "AbortError":           /* handle cancel */ break;
+    case "ProcessError":         /* handle exit */ break;
+    case "KnownError":           /* handle classified */ break;
+    default:                     /* fall through */
+  }
+}
+```
+
+The full union is `"ClaudeError" | "BudgetExceededError" | "AbortError" | "TimeoutError" | "AgentInactivityError" | "ProcessError" | "KnownError"`.
+
+`instanceof` checks still work and remain the recommended pattern for most code; `_tag` is for places where you want exhaustive `switch` coverage or are comparing across realms (e.g. structured-clone boundaries) where `instanceof` is unreliable.
+
 ## `ClaudeError`
 
 Base error class for all claude-wire errors.
@@ -56,7 +82,28 @@ try {
 
 ## `TimeoutError`
 
-Thrown when an operation times out. Distinct from `AbortError` for cases where the SDK itself enforces a timeout.
+Thrown when an operation times out. Distinct from `AbortError` for cases where the SDK itself enforces a timeout. Parent class of `AgentInactivityError`, so `instanceof TimeoutError` catches both.
+
+## `AgentInactivityError`
+
+Thrown by the SDK's inactivity watchdog when the CLI goes silent past `inactivityTimeoutMs` (default `TIMEOUTS.defaultAbortMs`, 5 minutes). The watchdog timer resets on every stdout chunk, so a chatty stream stays alive indefinitely.
+
+```ts
+import { AgentInactivityError } from "@pivanov/claude-wire";
+
+try {
+  await claude.ask("...", { inactivityTimeoutMs: 30_000 });
+} catch (error) {
+  if (error instanceof AgentInactivityError) {
+    console.error(`Agent silent for ${error.inactivityMs}ms, killed`);
+  }
+}
+```
+
+**Properties:**
+- `inactivityMs: number` -- the configured timeout that fired.
+
+Extends `TimeoutError`, so legacy `instanceof TimeoutError` checks keep working. Pass `Infinity` to disable the watchdog entirely.
 
 ## `ProcessError`
 

@@ -80,6 +80,13 @@ export interface IClaudeOptions {
    * prefixed with `[claude-wire]`.
    */
   onWarning?: TWarn;
+  /**
+   * Max time in ms the SDK will wait between successive stdout chunks from
+   * the CLI before throwing `AgentInactivityError`. Resets on every chunk,
+   * so a chatty stream stays alive indefinitely. Defaults to
+   * `TIMEOUTS.defaultAbortMs` (5 minutes). Set to `Infinity` to disable.
+   */
+  inactivityTimeoutMs?: number;
 }
 
 /**

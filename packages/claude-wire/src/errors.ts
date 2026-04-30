@@ -1,4 +1,17 @@
+// Discriminant union over every concrete error class. Lets consumers
+// pattern-match with `switch (err._tag)` for exhaustive handling without
+// `instanceof` chains. Add a new tag here when adding a new error class.
+export type TClaudeErrorTag =
+  | "ClaudeError"
+  | "BudgetExceededError"
+  | "AbortError"
+  | "TimeoutError"
+  | "AgentInactivityError"
+  | "ProcessError"
+  | "KnownError";
+
 export class ClaudeError extends Error {
+  readonly _tag: TClaudeErrorTag = "ClaudeError";
   constructor(message: string) {
     super(message);
     this.name = "ClaudeError";
@@ -6,6 +19,7 @@ export class ClaudeError extends Error {
 }
 
 export class BudgetExceededError extends ClaudeError {
+  override readonly _tag = "BudgetExceededError" as const;
   constructor(
     public readonly spent: number,
     public readonly budget: number,
@@ -16,6 +30,7 @@ export class BudgetExceededError extends ClaudeError {
 }
 
 export class AbortError extends ClaudeError {
+  override readonly _tag = "AbortError" as const;
   constructor(message = "Operation aborted") {
     super(message);
     this.name = "AbortError";
@@ -23,13 +38,29 @@ export class AbortError extends ClaudeError {
 }
 
 export class TimeoutError extends ClaudeError {
+  override readonly _tag: "TimeoutError" | "AgentInactivityError" = "TimeoutError";
   constructor(message = "Operation timed out") {
     super(message);
     this.name = "TimeoutError";
   }
 }
 
+// Thrown when the agent goes silent past `inactivityTimeoutMs`. Extends
+// TimeoutError so legacy `instanceof TimeoutError` catches still fire.
+// Distinguish via `err._tag === "AgentInactivityError"` or `instanceof`.
+export class AgentInactivityError extends TimeoutError {
+  override readonly _tag = "AgentInactivityError" as const;
+  constructor(
+    public readonly inactivityMs: number,
+    message?: string,
+  ) {
+    super(message ?? `No data received within ${inactivityMs}ms`);
+    this.name = "AgentInactivityError";
+  }
+}
+
 export class ProcessError extends ClaudeError {
+  override readonly _tag = "ProcessError" as const;
   constructor(
     message: string,
     public readonly exitCode?: number,
@@ -60,6 +91,7 @@ export const KNOWN_ERROR_CODES = [
 export type TKnownErrorCode = (typeof KNOWN_ERROR_CODES)[number];
 
 export class KnownError extends ClaudeError {
+  override readonly _tag = "KnownError" as const;
   constructor(
     public readonly code: TKnownErrorCode,
     message?: string,

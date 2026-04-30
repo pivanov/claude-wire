@@ -5,9 +5,10 @@ export { createClient } from "./client.js";
 export { BINARY, LIMITS, TIMEOUTS } from "./constants.js";
 export type { ICostProjection, ICostTracker, ICostTrackerOptions } from "./cost.js";
 export { createCostTracker } from "./cost.js";
-export type { TKnownErrorCode } from "./errors.js";
+export type { TClaudeErrorTag, TKnownErrorCode } from "./errors.js";
 export {
   AbortError,
+  AgentInactivityError,
   BudgetExceededError,
   ClaudeError,
   errorMessage,

@@ -40,6 +40,8 @@ export default defineConfig({
           { text: "Events", link: "/api/events" },
           { text: "JSON (askJson)", link: "/api/json" },
           { text: "Errors", link: "/api/errors" },
+          { text: "Subpath Exports", link: "/api/subpaths" },
+          { text: "Testing", link: "/api/testing" },
         ],
       },
       {

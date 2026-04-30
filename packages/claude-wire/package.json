@@ -1,6 +1,6 @@
 {
   "name": "@pivanov/claude-wire",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Run Claude Code programmatically. Typed SDK for spawning, streaming, and controlling the CLI.",
   "type": "module",
   "engines": {
@@ -11,7 +11,20 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./parser": {
+      "types": "./dist/parser/index.d.ts",
+      "import": "./dist/parser/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
     "claude-wire": "./dist/cli.js"

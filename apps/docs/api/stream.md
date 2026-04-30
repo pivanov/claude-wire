@@ -88,9 +88,19 @@ for await (const event of stream) { /* silently yields nothing */ }
 If `.text()`, `.cost()`, or `.result()` was called between the two iterations (or before the second one), the second iteration throws a `ClaudeError` instead of silently yielding nothing. Calling a convenience method marks the stream as consumed, making any subsequent iteration an error rather than a no-op.
 :::
 
-## Timeouts
+## Timeouts and Inactivity Watchdog
 
-Streams have a 5-minute timeout per read operation. If Claude doesn't respond within this window, a `TimeoutError` is thrown and the process is killed.
+Streams have a configurable inactivity timeout, defaulting to 5 minutes (`TIMEOUTS.defaultAbortMs`). The watchdog resets on every stdout chunk, so an actively streaming response can run indefinitely. If Claude goes silent past the window, the SDK throws `AgentInactivityError` and kills the process.
+
+```ts
+// Fail fast in interactive UIs:
+const stream = claude.stream("Explain generics", { inactivityTimeoutMs: 15_000 });
+
+// Disable the watchdog for batch jobs:
+const batch = claude.stream("Long task", { inactivityTimeoutMs: Infinity });
+```
+
+`AgentInactivityError` extends `TimeoutError`, so `instanceof TimeoutError` catches both. See [Errors](./errors.md#agentinactivityerror) for details.
 
 ## Buffer Limits
 

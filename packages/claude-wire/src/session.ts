@@ -188,6 +188,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
       proc,
       signal,
       onWarning: options.onWarning,
+      inactivityTimeoutMs: options.inactivityTimeoutMs,
     })) {
       if (event.type === "session_meta") {
         currentSessionId = event.sessionId;

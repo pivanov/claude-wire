@@ -174,6 +174,18 @@ Sessions respect the `signal` option from `IClaudeOptions`:
 const session = claude.session({ signal: AbortSignal.timeout(60_000) });
 ```
 
-## Timeouts
+## Timeouts and Inactivity Watchdog
 
-Each read operation has a 5-minute inactivity timeout (`TIMEOUTS.defaultAbortMs`). If no data is received within this window, a `TimeoutError` is thrown. The timeout resets on every chunk, so a turn that keeps streaming data can run indefinitely.
+Each read operation has a configurable inactivity timeout, defaulting to `TIMEOUTS.defaultAbortMs` (5 minutes). If no data arrives within this window the SDK throws `AgentInactivityError`, kills the process, and surfaces the error to the caller. The timer resets on every stdout chunk, so a turn that keeps streaming data can run indefinitely.
+
+```ts
+const session = claude.session({
+  model: "sonnet",
+  inactivityTimeoutMs: 30_000,  // fail fast in production paths
+});
+
+// Disable the watchdog for batch jobs that may legitimately stall:
+const longRunning = claude.session({ inactivityTimeoutMs: Infinity });
+```
+
+`AgentInactivityError` extends `TimeoutError`, so existing `instanceof TimeoutError` catches still fire. See [Errors](./errors.md#agentinactivityerror) for the full type signature.

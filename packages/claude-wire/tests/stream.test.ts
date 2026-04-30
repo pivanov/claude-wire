@@ -1,12 +1,13 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { join } from "node:path";
-import { createMockProcess, createMultiTurnMockProcess, loadFixtureLines, type TMockProcess } from "./helpers/mock-process.js";
+import { createMockProcess, createMultiTurnMockProcess, type IMockProcess } from "@/testing/index.js";
+import { loadFixtureLines } from "./helpers/fixtures.js";
 import { realProcessModule } from "./helpers/real-process.js";
 
 const FIXTURE_DIR = join(import.meta.dir, "fixtures");
 const singleTurnLines = loadFixtureLines(join(FIXTURE_DIR, "single-turn.ndjson"));
 
-let mockProc: TMockProcess;
+let mockProc: IMockProcess;
 
 beforeEach(() => {
   mockProc = createMockProcess(singleTurnLines);
@@ -136,8 +137,8 @@ describe("createStream", () => {
 
     // The fixture has tool_use events for Read (toolu_1) and Edit (toolu_2)
     // With tools.allowed = ["Read", "Edit"], both should be approved
-    const mockProcess = mockProc as TMockProcess & { readonly _writes: string[] };
-    const approveWrites = mockProcess._writes.filter((w: string) => {
+    const mockProcess = mockProc;
+    const approveWrites = mockProcess.writes.filter((w: string) => {
       try {
         const parsed = JSON.parse(w);
         return parsed.type === "approve";
@@ -173,15 +174,15 @@ describe("createStream", () => {
       // process events
     }
 
-    const mockProcess = mockProc as TMockProcess & { readonly _writes: string[] };
-    const denyWrites = mockProcess._writes.filter((w: string) => {
+    const mockProcess = mockProc;
+    const denyWrites = mockProcess.writes.filter((w: string) => {
       try {
         return JSON.parse(w).type === "deny";
       } catch {
         return false;
       }
     });
-    const approveWrites = mockProcess._writes.filter((w: string) => {
+    const approveWrites = mockProcess.writes.filter((w: string) => {
       try {
         return JSON.parse(w).type === "approve";
       } catch {
@@ -214,8 +215,7 @@ describe("createStream", () => {
       // drain
     }
 
-    const mockProcess = mockProc as TMockProcess & { readonly _killed: boolean };
-    expect(mockProcess._killed).toBe(true);
+    expect(mockProc.killed).toBe(true);
   });
 
   test("multiple calls to text() return same result (idempotent)", async () => {

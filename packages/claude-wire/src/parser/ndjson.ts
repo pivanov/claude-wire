@@ -13,7 +13,21 @@ export const parseLine = (line: string, onWarning?: TWarn): TClaudeEvent | undef
   }
 
   try {
-    return JSON.parse(trimmed) as TClaudeEvent;
+    const parsed = JSON.parse(trimmed);
+    // JSON allows scalar/array roots ("42", "true", "null", "[1]", "\"x\""),
+    // but every CLI event is a plain object. Treat anything else as malformed
+    // so the return type's `TClaudeEvent` shape isn't a lie -- otherwise
+    // downstream `raw.type` / `raw.message` accesses see undefined or array
+    // indices. Mirror the malformed-line branch so consumers still get an
+    // onWarning for the non-object case.
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      if (onWarning) {
+        const snippet = trimmed.length > WARN_SNIPPET_MAX ? `${trimmed.slice(0, WARN_SNIPPET_MAX)}…` : trimmed;
+        onWarning(`Skipped non-object NDJSON value: ${snippet}`);
+      }
+      return undefined;
+    }
+    return parsed as TClaudeEvent;
   } catch (error) {
     // A malformed NDJSON line means either a CLI bug or stderr leaking
     // into stdout. Surface it through onWarning so integrations can

@@ -27,7 +27,8 @@ console.log(result.costUsd);  // 0.0084
 - **Typed errors** - rate-limit, overload, context-length, retry-exhausted as `KnownError` codes
 - **Fully typed** - discriminated union events, full IntelliSense
 - **Resilient** - auto-respawn with backoff, transient error detection, AbortSignal
-- **Zero dependencies** - ~23 kB gzipped (bundle), 35 kB npm tarball
+- **Zero dependencies** - ~8 kB minified+gzipped (bundle), ~37 kB npm tarball
+- **Subpath exports** - `/errors`, `/parser`, `/testing` for narrower imports and bundle-isolated test helpers
 
 ## Install
 
@@ -89,7 +90,7 @@ apps/examples/          interactive example runner
 
 ```bash
 bun install
-bun run test        # 279 tests
+bun run test        # 301 tests including parser fuzz
 bun run typecheck
 bun run lint
 bun run docs:dev    # local docs server

@@ -1,20 +1,15 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { join } from "node:path";
-import {
-  createMockProcess,
-  createMultiTurnMockProcess,
-  loadFixtureLines,
-  type TMockProcess,
-  type TMultiTurnMockProcess,
-} from "./helpers/mock-process.js";
+import { createMockProcess, createMultiTurnMockProcess, type IMockProcess, type IMultiTurnMockProcess } from "@/testing/index.js";
+import { loadFixtureLines } from "./helpers/fixtures.js";
 import { realProcessModule } from "./helpers/real-process.js";
 
 const FIXTURE_DIR = join(import.meta.dir, "fixtures");
 const singleTurnLines = loadFixtureLines(join(FIXTURE_DIR, "single-turn.ndjson"));
 
 let spawnCount: number;
-let lastMockProc: TMockProcess | TMultiTurnMockProcess;
-let procFactory: () => TMockProcess | TMultiTurnMockProcess;
+let lastMockProc: IMockProcess | IMultiTurnMockProcess;
+let procFactory: () => IMockProcess | IMultiTurnMockProcess;
 
 beforeEach(() => {
   spawnCount = 0;
@@ -97,7 +92,7 @@ describe("createSession", () => {
     expect(spawnCount).toBe(1);
 
     // Verify the user message was written to stdin
-    const userWrites = multiProc._writes.filter((w) => {
+    const userWrites = multiProc.writes.filter((w) => {
       try {
         return JSON.parse(w).type === "user";
       } catch {
@@ -149,11 +144,11 @@ describe("createSession", () => {
 
     await session.ask("fix the bug");
 
-    const procRef = lastMockProc as TMockProcess & { readonly _killed: boolean };
+    const procRef = lastMockProc;
 
     await session.close();
 
-    expect(procRef._killed).toBe(true);
+    expect(procRef.killed).toBe(true);
   });
 
   test("concurrent ask() calls are queued (second waits for first)", async () => {

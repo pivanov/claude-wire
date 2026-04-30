@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createMockProcess, type TMockProcess } from "./helpers/mock-process.js";
+import { createMockProcess, type IMockProcess } from "@/testing/index.js";
 import { realProcessModule } from "./helpers/real-process.js";
 
 const jsonAnswer = '{"ok":true,"answer":"hello"}';
@@ -13,7 +13,7 @@ const jsonFixtureLines = [
   `{"type":"result","subtype":"success","session_id":"sess-json","result":${JSON.stringify(jsonAnswer)},"is_error":false,"total_cost_usd":0.012,"duration_ms":1800,"duration_api_ms":1500,"num_turns":1,"modelUsage":{"claude-haiku":{"inputTokens":500,"outputTokens":56,"cacheReadInputTokens":734,"cacheCreationInputTokens":0,"contextWindow":200000}}}`,
 ];
 
-let mockProc: TMockProcess;
+let mockProc: IMockProcess;
 
 beforeEach(() => {
   mockProc = createMockProcess(jsonFixtureLines);

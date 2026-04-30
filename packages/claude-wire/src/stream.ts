@@ -70,6 +70,7 @@ export const createStream = (prompt: string, options: IClaudeOptions = {}): ICla
         proc: p,
         signal: options.signal,
         onWarning: options.onWarning,
+        inactivityTimeoutMs: options.inactivityTimeoutMs,
       })) {
         if (event.type === "turn_complete") {
           applyTurnComplete(event, costTracker);

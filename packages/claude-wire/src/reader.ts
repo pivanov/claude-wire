@@ -1,5 +1,5 @@
 import { LIMITS, TIMEOUTS } from "./constants.js";
-import { AbortError, ClaudeError, TimeoutError } from "./errors.js";
+import { AbortError, AgentInactivityError, ClaudeError } from "./errors.js";
 import { parseLine } from "./parser/ndjson.js";
 import type { ITranslator } from "./parser/translator.js";
 import { dispatchToolDecision } from "./pipeline.js";
@@ -18,6 +18,12 @@ export interface IReaderOptions {
   proc?: IClaudeProcess;
   signal?: AbortSignal;
   onWarning?: TWarn;
+  /**
+   * Max ms between successive stdout chunks before throwing
+   * `AgentInactivityError`. Resets on every chunk. Defaults to
+   * `TIMEOUTS.defaultAbortMs`. Set to `Infinity` to disable.
+   */
+  inactivityTimeoutMs?: number;
 }
 
 export interface IStderrDrain {
@@ -82,6 +88,7 @@ export const drainStderr = (proc: { stderr: ReadableStream<Uint8Array> }, onWarn
 
 export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TRelayEvent> {
   const { reader, translator, signal } = opts;
+  const inactivityTimeoutMs = opts.inactivityTimeoutMs ?? TIMEOUTS.defaultAbortMs;
   const decoder = new TextDecoder();
   let buffer = "";
   let turnComplete = false;
@@ -109,13 +116,17 @@ export async function* readNdjsonEvents(opts: IReaderOptions): AsyncGenerator<TR
     }
   };
 
-  // Fresh promise per call -- a shared one stays rejected after the first fire and poisons subsequent reads when consumers pause > defaultAbortMs between pulls.
+  // Fresh promise per call -- a shared one stays rejected after the first fire and poisons subsequent reads when consumers pause > inactivityTimeoutMs between pulls.
+  // `Infinity` disables the watchdog entirely (no setTimeout scheduled).
   const raceWithTimeout = <T>(p: Promise<T>): Promise<T> => {
+    if (!Number.isFinite(inactivityTimeoutMs)) {
+      return Promise.race([p, abortPromise]) as Promise<T>;
+    }
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new TimeoutError(`No data received within ${TIMEOUTS.defaultAbortMs}ms`));
-      }, TIMEOUTS.defaultAbortMs);
+        reject(new AgentInactivityError(inactivityTimeoutMs));
+      }, inactivityTimeoutMs);
     });
     timeoutPromise.catch(() => {});
     return Promise.race([p, timeoutPromise, abortPromise]).finally(() => {

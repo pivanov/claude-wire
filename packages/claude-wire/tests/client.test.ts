@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_JSON_SYSTEM_PROMPT } from "@/json.js";
-import { createMockProcess, type TMockProcess } from "./helpers/mock-process.js";
+import { createMockProcess, type IMockProcess } from "@/testing/index.js";
 import { realProcessModule } from "./helpers/real-process.js";
 
 const jsonLines = [
@@ -9,7 +9,7 @@ const jsonLines = [
   '{"type":"result","subtype":"success","session_id":"sess-1","result":"{\\"label\\":\\"feature\\"}","is_error":false,"total_cost_usd":0.002,"duration_ms":1200,"duration_api_ms":900,"num_turns":1,"modelUsage":{"claude-sonnet-4-6":{"inputTokens":120,"outputTokens":20,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"contextWindow":200000}}}',
 ];
 
-let mockProc: TMockProcess;
+let mockProc: IMockProcess;
 let spawnedWith: { options: unknown } | undefined;
 
 beforeEach(() => {
