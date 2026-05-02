@@ -62,6 +62,29 @@ const resolveBinaryPath = (): string => {
   return BINARY.name;
 };
 
+// CLI quirk: `--json-schema` silently rejects any schema with a top-level
+// `$schema` URL (e.g. "https://json-schema.org/draft/2020-12/schema") and
+// falls back to plain text -- the StructuredOutput tool never fires.
+// Zod 4's `z.toJSONSchema` emits `$schema` by default and many other
+// converters do too, so callers passing converter output verbatim hit
+// this dead end. Strip the field transparently before forwarding so the
+// caller never has to know about the CLI's parser limitation. Malformed
+// JSON passes through unchanged; the CLI surfaces its own parse error.
+export const sanitizeJsonSchemaForCli = (raw: string): string => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && "$schema" in parsed) {
+      const { $schema: _strip, ...rest } = parsed as Record<string, unknown>;
+      void _strip;
+      return JSON.stringify(rest);
+    }
+  } catch {
+    // malformed input -- let the CLI surface its own error rather than
+    // hide it behind a parse exception thrown in our build phase.
+  }
+  return raw;
+};
+
 // Rejects lines whose first non-whitespace char is `#` so commented-out
 // aliases/exports don't silently apply. /m anchors to each line in rc files.
 export const ALIAS_PATTERN =
@@ -142,13 +165,37 @@ export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] 
   kv(options.systemPrompt, "--system-prompt");
   kv(options.appendSystemPrompt, "--append-system-prompt");
 
-  if (options.allowedTools) {
+  // Tool surface resolution. The CLI exposes two flags with different
+  // semantics:
+  //   `--allowedTools <list>` is additive: tools listed here are added to
+  //     whatever `~/.claude/settings.json` and project settings already
+  //     enabled. Used historically by claude-wire for non-empty lists,
+  //     preserved for back-compat in the no-schema branch below.
+  //   `--tools <list>` is a strict whitelist: ONLY the listed tools are
+  //     available, regardless of user/project settings. `--tools ""`
+  //     disables every tool (including MCP).
+  //
+  // When `--json-schema` is set, the CLI delivers the constrained value
+  // through a synthetic `StructuredOutput` tool. Two failure modes:
+  //   (1) The default tool set does not include StructuredOutput, so
+  //       without an explicit allow flag the model can't emit it.
+  //   (2) `--allowedTools StructuredOutput` is additive: user settings
+  //       still expose Bash/Edit/Read/MCP/etc., giving the model an
+  //       escape hatch back to plain text. The constraint must be
+  //       strict, so the schema branch always uses `--tools`.
+  //
+  // Result: every schema-bearing turn gets `--tools <list,StructuredOutput>`
+  // regardless of how the caller restricted the rest of the surface.
+  if (options.jsonSchema) {
+    const base = options.allowedTools ?? [];
+    const list = base.includes("StructuredOutput") ? base : [...base, "StructuredOutput"];
+    args.push("--tools", list.join(","));
+  } else if (options.allowedTools !== undefined) {
     if (options.allowedTools.length === 0) {
-      // Empty array means "no tools at all". The CLI uses --tools "" to
-      // disable all tools (including MCP). Non-empty lists use the distinct
-      // --allowedTools flag which selectively enables named tools.
+      // Caller said "no tools" with no schema in play.
       args.push("--tools", "");
     } else {
+      // Existing additive-permission semantics for non-schema callers.
       args.push("--allowedTools", options.allowedTools.join(","));
     }
   }
@@ -176,7 +223,9 @@ export const buildArgs = (options: ISpawnOptions, binaryPath: string): string[] 
   flag(options.includeHookEvents, "--include-hook-events");
   flag(options.includePartialMessages, "--include-partial-messages");
   flag(options.bare, "--bare");
-  kv(options.jsonSchema, "--json-schema");
+  if (options.jsonSchema) {
+    args.push("--json-schema", sanitizeJsonSchemaForCli(options.jsonSchema));
+  }
   flag(options.forkSession, "--fork-session");
   flag(options.noSessionPersistence, "--no-session-persistence");
   kv(options.sessionId, "--session-id");

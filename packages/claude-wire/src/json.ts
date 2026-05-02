@@ -59,6 +59,69 @@ const isStandardSchema = <T>(schema: TSchemaInput<T>): schema is IStandardSchema
   return typeof schema === "object" && schema !== null && "~standard" in schema;
 };
 
+/**
+ * Try to derive a JSON Schema string from a Standard Schema object so the
+ * caller can forward it to the CLI via the `jsonSchema` option for native
+ * output constraint. Detects the vendor via `schema['~standard'].vendor`
+ * and dispatches to that library's converter:
+ *
+ *   - `zod`: requires Zod 4+ (`z.toJSONSchema(schema)`).
+ *   - `valibot`: requires the separate `@valibot/to-json-schema` package.
+ *   - `arktype`: schemas expose `.toJsonSchema()` on the schema itself.
+ *
+ * Returns `undefined` when the vendor is unknown, the converter package is
+ * not installed, or the converter throws. Caller decides whether to warn
+ * or fall back to prompt-engineering only.
+ *
+ * Without this, `askJson(prompt, zodSchema)` only validates client-side;
+ * the CLI runs unconstrained and Haiku in particular can emit thinking
+ * blocks with no text content on trivial prompts. With this, `askJson`
+ * forwards a derived schema to `--json-schema` so the model is forced to
+ * emit valid constrained JSON in a text block.
+ */
+// Indirection so TypeScript skips static module resolution: zod and
+// @valibot/to-json-schema are optional peer deps that may or may not be
+// installed in the consumer's project. A literal `import("zod")` would
+// error at typecheck time on installs without zod. Going through a
+// variable keeps the behavior at runtime (dynamic resolution) and lets
+// the compiler treat the result as `unknown`.
+const dynImport = (name: string): Promise<unknown> => import(name);
+
+export const standardSchemaToJsonSchema = async <T>(schema: IStandardSchema<T>): Promise<string | undefined> => {
+  const vendor = schema["~standard"].vendor;
+  try {
+    if (vendor === "zod") {
+      // Zod 4 added `toJSONSchema` as a top-level export. Older Zod doesn't
+      // have it; we detect at runtime and bail when the function is missing.
+      const zod = (await dynImport("zod")) as { toJSONSchema?: (s: unknown) => unknown };
+      if (typeof zod.toJSONSchema === "function") {
+        return JSON.stringify(zod.toJSONSchema(schema));
+      }
+      return undefined;
+    }
+    if (vendor === "valibot") {
+      // Valibot ships JSON Schema conversion in a separate optional package.
+      const mod = (await dynImport("@valibot/to-json-schema")) as { toJsonSchema?: (s: unknown) => unknown };
+      if (typeof mod.toJsonSchema === "function") {
+        return JSON.stringify(mod.toJsonSchema(schema));
+      }
+      return undefined;
+    }
+    if (vendor === "arktype") {
+      // ArkType schemas carry their own toJsonSchema method directly.
+      const ark = schema as unknown as { toJsonSchema?: () => unknown };
+      if (typeof ark.toJsonSchema === "function") {
+        return JSON.stringify(ark.toJsonSchema());
+      }
+      return undefined;
+    }
+  } catch {
+    // import failed (peer not installed) or converter threw -- fall through
+    // and return undefined. The caller's prompt-engineering path still runs.
+  }
+  return undefined;
+};
+
 export const parseAndValidate = async <T>(text: string, schema: TSchemaInput<T>): Promise<T> => {
   const stripped = stripFences(text);
 

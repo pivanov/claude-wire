@@ -19,6 +19,7 @@ const result = await claude.ask("Fix the bug in main.ts", {
 type TAskResult = {
   text: string;                        // concatenated text output
   thinking: string;                    // concatenated thinking content (empty when none emitted)
+  structuredOutput?: unknown;          // schema-constrained value when --json-schema was set
   costUsd: number;                     // total cost in USD
   tokens: {
     input: number;                     // total input (base + cache read + cache creation)
@@ -31,6 +32,8 @@ type TAskResult = {
   events: TRelayEvent[];               // all events
 };
 ```
+
+`structuredOutput` is set only when the CLI was launched with a `jsonSchema` and produced a constrained value (either via the synthetic `StructuredOutput` tool_use or the terminal `result` event's `structured_output` field). `claude.askJson` and `session.askJson` read this channel preferentially over `text`, because in constrained-output turns `text` can carry Stop-hook nag messages or commentary that would corrupt naive validation. See [JSON: Standard Schema route](./json.md#standard-schema-objects-recommended).
 
 ## `claude.askJson(prompt, schema, options?)`
 

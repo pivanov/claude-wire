@@ -48,4 +48,11 @@ export type TClaudeEvent = {
   total_cost_usd?: number;
   is_error?: boolean;
   modelUsage?: Record<string, TModelUsageEntry>;
+  // Set on the terminal `result` event when the CLI was launched with
+  // --json-schema. Carries the schema-constrained value as a parsed object.
+  // The translator surfaces it as a `structured_output` relay event and
+  // exposes it on `TAskResult.structuredOutput` so `askJson` can read the
+  // canonical JSON without scraping `raw.text` (which can be polluted by
+  // hook-nag messages or unrelated model commentary in the same turn).
+  structured_output?: unknown;
 };

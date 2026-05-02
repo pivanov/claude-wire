@@ -10,7 +10,8 @@ type TRelayEvent =
   | TToolResultEvent
   | TSessionMetaEvent
   | TTurnCompleteEvent
-  | TErrorEvent;
+  | TErrorEvent
+  | TStructuredOutputEvent;
 ```
 
 ## `TTextEvent`
@@ -111,3 +112,16 @@ An error from the session.
   sessionId: "sess-abc123"
 }
 ```
+
+## `TStructuredOutputEvent`
+
+Emitted once per turn when the CLI was launched with `--json-schema` and produced a constrained value. The translator surfaces whichever channel fires first: a synthetic `StructuredOutput` `tool_use` block (preferred), or the terminal `result` event's `structured_output` field (fallback). Dedup ensures a single event per turn.
+
+```ts
+{
+  type: "structured_output",
+  value: { greeting: "hello" }   // parsed JSON object, not a string
+}
+```
+
+`buildResult` exposes the value on `TAskResult.structuredOutput` for one-shot consumers; streaming consumers can read it from this event directly. `claude.askJson` and `session.askJson` read `raw.structuredOutput` preferentially over `raw.text` so Stop-hook nag messages or other commentary in the same turn don't corrupt validation. See [JSON: Standard Schema route](./json.md#standard-schema-objects-recommended) for caller-facing usage.

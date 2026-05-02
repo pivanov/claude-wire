@@ -20,7 +20,7 @@ export {
   TimeoutError,
 } from "./errors.js";
 export type { IJsonResult, IStandardSchema, TSchemaInput } from "./json.js";
-export { JsonValidationError, parseAndValidate, stripFences } from "./json.js";
+export { JsonValidationError, parseAndValidate, standardSchemaToJsonSchema, stripFences } from "./json.js";
 export { blockFingerprint, extractContent, parseDoubleEncoded } from "./parser/content.js";
 export { parseLine } from "./parser/ndjson.js";
 export type { ITranslator } from "./parser/translator.js";

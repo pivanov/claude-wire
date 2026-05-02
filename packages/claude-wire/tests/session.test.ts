@@ -428,4 +428,31 @@ describe("createSession", () => {
       (TIMEOUTS as { gracefulExitMs: number }).gracefulExitMs = originalGrace;
     }
   });
+
+  test("askJson throws clear error when model emits thinking but no text", async () => {
+    const { JsonValidationError } = await import("@/json.js");
+    const thinkingOnlyLines = [
+      '{"type":"system","subtype":"init","session_id":"s1","model":"haiku","tools":[]}',
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"User wants JSON. I should produce {\\"x\\":1}."}]}}',
+      '{"type":"result","subtype":"success","session_id":"s1","result":"","is_error":false,"total_cost_usd":0.001,"duration_ms":300,"num_turns":1,"modelUsage":{}}',
+    ];
+    procFactory = () => createMockProcess(thinkingOnlyLines);
+
+    const createSession = await loadCreateSession();
+    const session = createSession();
+
+    try {
+      await session.askJson("classify", '{"type":"object"}');
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(JsonValidationError);
+      const msg = (err as Error).message;
+      expect(msg).toMatch(/thinking/i);
+      expect(msg).toMatch(/no text/i);
+      // Session-specific guidance: hints at jsonSchema-at-creation OR stateless askJson.
+      expect(msg).toMatch(/session/i);
+    } finally {
+      await session.close();
+    }
+  });
 });

@@ -51,4 +51,22 @@ export type TErrorEvent = {
   sessionId?: string;
 };
 
-export type TRelayEvent = TTextEvent | TThinkingEvent | TToolUseEvent | TToolResultEvent | TSessionMetaEvent | TTurnCompleteEvent | TErrorEvent;
+// Emitted when the CLI was given --json-schema and produced a constrained
+// value via the synthetic StructuredOutput tool_use block, OR via the
+// terminal result event's structured_output field. The value is the parsed
+// JSON object directly (not a string). Only one structured_output event is
+// emitted per turn; the translator dedupes between the two source paths.
+export type TStructuredOutputEvent = {
+  type: "structured_output";
+  value: unknown;
+};
+
+export type TRelayEvent =
+  | TTextEvent
+  | TThinkingEvent
+  | TToolUseEvent
+  | TToolResultEvent
+  | TSessionMetaEvent
+  | TTurnCompleteEvent
+  | TErrorEvent
+  | TStructuredOutputEvent;

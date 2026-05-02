@@ -25,6 +25,14 @@ export type TAskResult = {
   // Empty string when no thinking blocks were emitted (effort/model dependent),
   // not undefined, so callers can concatenate without null-checks.
   thinking: string;
+  // Set when the CLI was given --json-schema and produced a constrained
+  // value (either via the synthetic StructuredOutput tool_use block or via
+  // the terminal result event's structured_output field). `askJson` reads
+  // this preferentially over `text` because `text` can contain unrelated
+  // commentary (Stop-hook nag messages, partial assistant text) that breaks
+  // a naive parseAndValidate. Undefined when --json-schema wasn't set or
+  // the model didn't produce a structured value.
+  structuredOutput?: unknown;
   costUsd: number;
   tokens: TTokens;
   // Undefined when the CLI closed stdout without sending a `turn_complete`

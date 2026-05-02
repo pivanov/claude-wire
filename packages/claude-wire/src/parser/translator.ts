@@ -51,55 +51,77 @@ export interface ITranslator {
   reset: () => void;
 }
 
-const translateContentBlock = (block: TClaudeContent): TRelayEvent | undefined => {
-  switch (block.type) {
-    case "thinking": {
-      const content = block.thinking ?? block.text ?? "";
-      if (content) {
-        return { type: "thinking", content };
-      }
-      return undefined;
-    }
-    case "text": {
-      const content = block.text ?? "";
-      if (content) {
-        return { type: "text", content };
-      }
-      return undefined;
-    }
-    case "tool_use": {
-      // Drop malformed tool_use events entirely. An empty toolName would
-      // otherwise bypass allow/block lists by matching nothing.
-      if (!block.id || !block.name) {
-        return undefined;
-      }
-      return {
-        type: "tool_use",
-        toolUseId: block.id,
-        toolName: block.name,
-        input: block.input ?? {},
-      };
-    }
-    case "tool_result": {
-      return {
-        type: "tool_result",
-        toolUseId: block.tool_use_id ?? "",
-        output: extractContent(block.content),
-        isError: block.is_error ?? false,
-      };
-    }
-    default:
-      return undefined;
-  }
-};
-
 export const createTranslator = (): ITranslator => {
   let lastContentIndex = 0;
   let lastMessageKey: string | undefined;
+  // Tracks whether a StructuredOutput tool_use already produced a synthetic
+  // structured_output event for this turn. When set, the result handler's
+  // raw.structured_output fallback skips emission so consumers don't see
+  // duplicate structured_output events. Reset on turn end alongside the
+  // dedup state below.
+  let synthesizedStructuredOutput = false;
 
   const reset = () => {
     lastContentIndex = 0;
     lastMessageKey = undefined;
+    synthesizedStructuredOutput = false;
+  };
+
+  const translateContentBlock = (block: TClaudeContent): TRelayEvent | undefined => {
+    switch (block.type) {
+      case "thinking": {
+        const content = block.thinking ?? block.text ?? "";
+        if (content) {
+          return { type: "thinking", content };
+        }
+        return undefined;
+      }
+      case "text": {
+        const content = block.text ?? "";
+        if (content) {
+          return { type: "text", content };
+        }
+        return undefined;
+      }
+      case "tool_use": {
+        // Claude Code CLI emits a synthetic `StructuredOutput` tool_use when
+        // --json-schema is set: the schema-constrained JSON arrives inside
+        // `input`. Surface as a `structured_output` relay event (not text),
+        // so `raw.text` stays honest about model commentary (Stop-hook nag
+        // messages, partial output) while the structured value gets its own
+        // unambiguous channel via `raw.structuredOutput`. We also flip a
+        // dedup flag so the result-event fallback below skips itself when
+        // we've already captured the value here.
+        if (block.name === "StructuredOutput") {
+          if (block.input === undefined) {
+            return undefined;
+          }
+          synthesizedStructuredOutput = true;
+          return { type: "structured_output", value: block.input };
+        }
+        // Drop malformed tool_use events entirely. An empty toolName would
+        // otherwise bypass allow/block lists by matching nothing.
+        if (!block.id || !block.name) {
+          return undefined;
+        }
+        return {
+          type: "tool_use",
+          toolUseId: block.id,
+          toolName: block.name,
+          input: block.input ?? {},
+        };
+      }
+      case "tool_result": {
+        return {
+          type: "tool_result",
+          toolUseId: block.tool_use_id ?? "",
+          output: extractContent(block.content),
+          isError: block.is_error ?? false,
+        };
+      }
+      default:
+        return undefined;
+    }
   };
 
   const translate = (raw: TClaudeEvent): TRelayEvent[] => {
@@ -119,6 +141,16 @@ export const createTranslator = (): ITranslator => {
       if (raw.is_error) {
         const text = parseDoubleEncoded(raw.result);
         events.push({ type: "error", message: text, sessionId: raw.session_id });
+      }
+
+      // Result-event fallback for `--json-schema` constrained turns. The
+      // synthetic StructuredOutput tool_use route inside an assistant
+      // message can be unreliable when the CLI streams blocks with
+      // undefined `input` mid-turn; the terminal result event always
+      // carries the canonical `structured_output`. Skip when the block
+      // route already emitted to keep one structured_output per turn.
+      if (!synthesizedStructuredOutput && raw.structured_output !== undefined) {
+        events.push({ type: "structured_output", value: raw.structured_output });
       }
 
       events.push(buildTurnComplete(raw));

@@ -3,7 +3,7 @@ import type { IClaudeProcess, ISpawnOptions } from "./process.js";
 import { safeWrite, spawnClaude } from "./process.js";
 import { drainStderr, type IStderrDrain } from "./reader.js";
 import type { IToolHandlerInstance, TToolDecision } from "./tools/handler.js";
-import type { TRelayEvent, TTextEvent, TThinkingEvent, TToolUseEvent, TTurnCompleteEvent } from "./types/events.js";
+import type { TRelayEvent, TStructuredOutputEvent, TTextEvent, TThinkingEvent, TToolUseEvent, TTurnCompleteEvent } from "./types/events.js";
 import type { TAskResult, TCostSnapshot } from "./types/results.js";
 import type { TWarn } from "./warnings.js";
 import { createWarn } from "./warnings.js";
@@ -95,11 +95,17 @@ export const extractThinking = (events: TRelayEvent[]): string => {
 
 export const buildResult = (events: TRelayEvent[], costTracker: ICostTracker, sessionId: string | undefined): TAskResult => {
   const tc = events.findLast((e): e is TTurnCompleteEvent => e.type === "turn_complete");
+  // Take the last structured_output event in the turn. The translator emits
+  // at most one (dedup between block-route and result-route), so first/last
+  // collapse to the same value in practice; using findLast keeps us robust
+  // to a future protocol that might legitimately stream multiple updates.
+  const so = events.findLast((e): e is TStructuredOutputEvent => e.type === "structured_output");
   const snap = costTracker.snapshot();
 
   return {
     text: extractText(events),
     thinking: extractThinking(events),
+    structuredOutput: so?.value,
     costUsd: snap.totalUsd,
     tokens: snap.tokens,
     duration: tc?.durationMs,

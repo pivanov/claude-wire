@@ -55,7 +55,7 @@ async function handleRequest(req) {
 
 ## `session.askJson(prompt, schema, options?)`
 
-Same as `claude.askJson()` but within a session. The response is parsed and validated against the schema, and the session's conversation context is preserved.
+Same SDK-side validation as `claude.askJson()` but within a session. The response is parsed and validated against the schema, and the session's conversation context is preserved.
 
 ```ts
 import { z } from "zod";
@@ -73,6 +73,15 @@ await session.close();
 ```
 
 Accepts the same schema inputs as `claude.askJson()` -- Standard Schema objects or raw JSON Schema strings. Throws `JsonValidationError` on parse/validation failure.
+
+::: warning Sessions cannot auto-derive `--json-schema` per ask
+The CLI's `--json-schema` flag is bound to the long-lived process spawned at session creation. Unlike `claude.askJson()` (stateless), `session.askJson()` cannot pass a fresh JSON Schema to the CLI per call. If you need native CLI constraint:
+
+- One schema per session: pass `jsonSchema: '{"type":"object",...}'` (a JSON Schema string) at session creation. Use `standardSchemaToJsonSchema()` to derive it from a Standard Schema object.
+- Many schemas: use stateless `claude.askJson()` per call (auto-derives) or maintain a session-per-schema cache.
+
+When a session was started without `jsonSchema` and the model emits a thinking block with no text content, `session.askJson()` throws `JsonValidationError` with guidance instead of the misleading `Unexpected EOF` from `JSON.parse("")`. See [JSON: empty text with thinking](./json.md#empty-text-with-thinking-content).
+:::
 
 **Returns:** `Promise<IJsonResult<T>>`
 

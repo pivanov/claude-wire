@@ -1,4 +1,11 @@
-import { DEFAULT_JSON_SYSTEM_PROMPT, type IJsonResult, parseAndValidate, type TSchemaInput } from "./json.js";
+import {
+  DEFAULT_JSON_SYSTEM_PROMPT,
+  type IJsonResult,
+  JsonValidationError,
+  parseAndValidate,
+  standardSchemaToJsonSchema,
+  type TSchemaInput,
+} from "./json.js";
 import type { IClaudeSession } from "./session.js";
 import { createSession } from "./session.js";
 import type { IClaudeStream } from "./stream.js";
@@ -37,13 +44,25 @@ export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, options?: IClaudeOptions): Promise<IJsonResult<T>> => {
     const merged = mergeOptions(defaults, options);
-    // A raw JSON Schema string is forwarded to the CLI via --json-schema so
-    // the model is constrained to produce valid JSON. Standard Schema
-    // objects are validated SDK-side only -- most libraries don't expose a
-    // JSON Schema representation at runtime, and our validator runs either
-    // way after the response arrives.
+    // Resolve the CLI-side JSON Schema. Priority:
+    //   1. caller-supplied `merged.jsonSchema` (string) wins.
+    //   2. raw schema string passed as the second arg becomes jsonSchema.
+    //   3. Standard Schema objects auto-derive when the vendor supports it
+    //      (Zod 4 / Valibot / ArkType). Failing that, we fall through to
+    //      prompt-engineering only.
+    //
+    // Without a forwarded jsonSchema, recent Claude Code CLI builds (with
+    // --output-format stream-json) can emit thinking-only turns on trivial
+    // prompts -- the model satisfies the "respond JSON" instruction in its
+    // reasoning block and never produces a text block. The CLI's own
+    // --json-schema constraint forces a text block to exist.
     if (typeof schema === "string") {
       merged.jsonSchema = schema;
+    } else if (merged.jsonSchema === undefined) {
+      const derived = await standardSchemaToJsonSchema(schema);
+      if (derived !== undefined) {
+        merged.jsonSchema = derived;
+      }
     }
     // Force JSON-only output at the prompt level. `--json-schema` is a hint
     // that Claude Code's CLI doesn't hard-enforce, so sonnet/haiku both
@@ -55,6 +74,29 @@ export const createClient = (defaults: IClaudeOptions = {}): IClaudeClient => {
       merged.systemPrompt = DEFAULT_JSON_SYSTEM_PROMPT;
     }
     const raw = await ask(prompt, merged);
+    // Prefer the canonical structured_output channel when --json-schema was
+    // forwarded. raw.text in those turns can carry Stop-hook nag messages
+    // ("You MUST call StructuredOutput") or partial commentary unrelated to
+    // the JSON, which would corrupt parseAndValidate. raw.structuredOutput
+    // is the parsed value the CLI produced under schema constraint; we
+    // re-stringify so parseAndValidate's existing fence-strip + validate
+    // path runs uniformly for both channels.
+    if (raw.structuredOutput !== undefined) {
+      const data = await parseAndValidate(JSON.stringify(raw.structuredOutput), schema);
+      return { data, raw };
+    }
+    // Surface "model emitted only thinking, no text" as a typed error.
+    // parseAndValidate("") would otherwise throw "Unexpected end of JSON
+    // input" which doesn't tell the caller what to fix. This case happens
+    // when there's no native CLI constraint and the model talked itself
+    // out of producing output; the message points at the actionable knob.
+    if (raw.text === "" && raw.thinking !== "") {
+      throw new JsonValidationError(
+        "Model produced a thinking block but no text content. The CLI was not given a JSON Schema to constrain output. Pass `jsonSchema` (string) in options, or use a Standard Schema vendor that supports auto-derivation (Zod 4+, Valibot via @valibot/to-json-schema, ArkType).",
+        "",
+        [{ message: "empty text response" }],
+      );
+    }
     const data = await parseAndValidate(raw.text, schema);
     return { data, raw };
   };

@@ -71,6 +71,57 @@ describe("buildArgs", () => {
     expect(args[idx + 1]).toBe("");
   });
 
+  test("uses strict --tools StructuredOutput when jsonSchema is set with empty allowedTools", () => {
+    // --tools "" would disable every tool including the synthetic
+    // StructuredOutput channel; --allowedTools is additive and would
+    // leak user-settings tools that let the model bypass the constraint.
+    // Strict whitelist via --tools is the only path that both enables
+    // StructuredOutput and forces it as the only available channel.
+    const args = buildArgs({ allowedTools: [], jsonSchema: '{"type":"object"}' }, binary);
+    expect(args.indexOf("--allowedTools")).toBe(-1);
+    const idx = args.indexOf("--tools");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("StructuredOutput");
+  });
+
+  test("appends StructuredOutput to --tools when jsonSchema is set with a non-empty list", () => {
+    const args = buildArgs({ allowedTools: ["Read", "Write"], jsonSchema: '{"type":"object"}' }, binary);
+    expect(args.indexOf("--allowedTools")).toBe(-1);
+    const idx = args.indexOf("--tools");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("Read,Write,StructuredOutput");
+  });
+
+  test("does not duplicate StructuredOutput when caller already listed it under jsonSchema", () => {
+    const args = buildArgs({ allowedTools: ["Read", "StructuredOutput"], jsonSchema: '{"type":"object"}' }, binary);
+    const idx = args.indexOf("--tools");
+    expect(args[idx + 1]).toBe("Read,StructuredOutput");
+  });
+
+  test("leaves allowedTools alone when jsonSchema is unset (no schema, no override)", () => {
+    const args = buildArgs({ allowedTools: ["Read"] }, binary);
+    const idx = args.indexOf("--allowedTools");
+    expect(args[idx + 1]).toBe("Read");
+  });
+
+  test("forces --tools StructuredOutput when jsonSchema is set and allowedTools is undefined", () => {
+    // Most common caller pattern: claude.askJson(prompt, schema) with
+    // model + jsonSchema and no tool restriction. Without --tools the
+    // model has the user's full settings.json tool surface and can pick
+    // plain text instead of calling StructuredOutput.
+    const args = buildArgs({ jsonSchema: '{"type":"object"}' }, binary);
+    expect(args.indexOf("--allowedTools")).toBe(-1);
+    const idx = args.indexOf("--tools");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("StructuredOutput");
+  });
+
+  test("emits no tool flag when neither jsonSchema nor allowedTools is set", () => {
+    const args = buildArgs({}, binary);
+    expect(args.indexOf("--allowedTools")).toBe(-1);
+    expect(args.indexOf("--tools")).toBe(-1);
+  });
+
   test("includes --disallowedTools", () => {
     const args = buildArgs({ disallowedTools: ["Bash"] }, binary);
     const idx = args.indexOf("--disallowedTools");
@@ -149,6 +200,44 @@ describe("buildArgs", () => {
   test("includes --json-schema", () => {
     const args = buildArgs({ jsonSchema: '{"type":"object"}' }, binary);
     expect(args).toContain("--json-schema");
+  });
+
+  test("strips top-level $schema from jsonSchema before forwarding (CLI quirk)", () => {
+    // Zod 4's `z.toJSONSchema` emits a `$schema` URL by default; the CLI
+    // silently rejects schemas carrying it and falls back to plain text.
+    // Strip it transparently so callers can pass converter output verbatim.
+    const raw = '{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"x":{"type":"number"}},"required":["x"]}';
+    const args = buildArgs({ jsonSchema: raw }, binary);
+    const idx = args.indexOf("--json-schema");
+    expect(idx).toBeGreaterThan(-1);
+    const value = args[idx + 1] ?? "";
+    expect(value).not.toContain("$schema");
+    const parsed = JSON.parse(value);
+    expect(parsed).toEqual({ type: "object", properties: { x: { type: "number" } }, required: ["x"] });
+  });
+
+  test("leaves jsonSchema unchanged when no top-level $schema is present", () => {
+    const raw = '{"type":"object","properties":{"x":{"type":"number"}}}';
+    const args = buildArgs({ jsonSchema: raw }, binary);
+    const idx = args.indexOf("--json-schema");
+    expect(args[idx + 1]).toBe(raw);
+  });
+
+  test("preserves nested $schema occurrences (only top-level is stripped)", () => {
+    // Defensive: a $schema key inside a sub-schema is part of the user's
+    // intent (e.g. an embedded Draft-07 hint). Only the top-level field
+    // breaks the CLI; nested occurrences should pass through unchanged.
+    const raw = '{"type":"object","properties":{"meta":{"type":"object","properties":{"$schema":{"type":"string"}}}}}';
+    const args = buildArgs({ jsonSchema: raw }, binary);
+    const idx = args.indexOf("--json-schema");
+    expect(args[idx + 1]).toBe(raw);
+  });
+
+  test("malformed jsonSchema string passes through for the CLI to surface its own error", () => {
+    const raw = "not-json-at-all";
+    const args = buildArgs({ jsonSchema: raw }, binary);
+    const idx = args.indexOf("--json-schema");
+    expect(args[idx + 1]).toBe(raw);
   });
 
   test("includes --session-id", () => {

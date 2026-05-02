@@ -502,6 +502,152 @@ describe("createTranslator", () => {
     });
   });
 
+  describe("StructuredOutput / structured_output (--json-schema route)", () => {
+    test("translates StructuredOutput tool_use to a structured_output event", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "StructuredOutput", input: { greeting: "hello" } }],
+        },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({ type: "structured_output", value: { greeting: "hello" } });
+    });
+
+    test("StructuredOutput without an id is still routed (CLI omits id on synthetic blocks)", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "StructuredOutput", input: { x: 1 } }],
+        },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0]?.type).toBe("structured_output");
+      if (events[0]?.type === "structured_output") {
+        expect(events[0].value).toEqual({ x: 1 });
+      }
+    });
+
+    test("StructuredOutput with undefined input is dropped (partial-block guard)", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "StructuredOutput" }],
+        },
+      });
+      expect(events).toHaveLength(0);
+    });
+
+    test("StructuredOutput with null input emits structured_output with null value", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "StructuredOutput", input: null }],
+        },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({ type: "structured_output", value: null });
+    });
+
+    test("regular user-defined tool_use is unaffected", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "main.ts" } }],
+        },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0]?.type).toBe("tool_use");
+    });
+
+    test("result.structured_output fallback fires when no tool_use was seen", () => {
+      const translator = createTranslator();
+      // Simulate a turn where the StructuredOutput tool_use had undefined
+      // input (partial block) and was dropped, leaving only the result
+      // event's structured_output as the canonical source.
+      translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "text", text: "Stop hook feedback: call StructuredOutput." }],
+        },
+      });
+      const events = translator.translate({
+        type: "result",
+        subtype: "success",
+        session_id: "s1",
+        result: "...",
+        is_error: false,
+        total_cost_usd: 0.001,
+        duration_ms: 100,
+        structured_output: { greeting: "hello" },
+      });
+      const structured = events.find((e) => e.type === "structured_output");
+      expect(structured).toEqual({ type: "structured_output", value: { greeting: "hello" } });
+      const turnComplete = events.find((e) => e.type === "turn_complete");
+      expect(turnComplete).toBeDefined();
+    });
+
+    test("result.structured_output fallback is skipped when block route already emitted", () => {
+      const translator = createTranslator();
+      translator.translate({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "StructuredOutput", input: { x: 1 } }],
+        },
+      });
+      const events = translator.translate({
+        type: "result",
+        subtype: "success",
+        session_id: "s1",
+        result: "...",
+        is_error: false,
+        total_cost_usd: 0.001,
+        duration_ms: 100,
+        structured_output: { x: 1 },
+      });
+      const structured = events.filter((e) => e.type === "structured_output");
+      expect(structured).toHaveLength(0);
+    });
+
+    test("dedup state resets across turns", () => {
+      const translator = createTranslator();
+      // Turn 1: block route fires.
+      translator.translate({
+        type: "assistant",
+        message: { content: [{ type: "tool_use", name: "StructuredOutput", input: { x: 1 } }] },
+      });
+      translator.translate({ type: "result", subtype: "success", session_id: "s1", structured_output: { x: 1 } });
+      // Turn 2: block route doesn't fire, result fallback should fire fresh.
+      const events = translator.translate({
+        type: "result",
+        subtype: "success",
+        session_id: "s1",
+        structured_output: { x: 2 },
+      });
+      const structured = events.find((e) => e.type === "structured_output");
+      expect(structured).toEqual({ type: "structured_output", value: { x: 2 } });
+    });
+
+    test("result without structured_output does not emit anything synthetic", () => {
+      const translator = createTranslator();
+      const events = translator.translate({
+        type: "result",
+        subtype: "success",
+        session_id: "s1",
+        result: "ok",
+        is_error: false,
+        total_cost_usd: 0,
+      });
+      const structured = events.filter((e) => e.type === "structured_output");
+      expect(structured).toHaveLength(0);
+    });
+  });
+
   describe("multi-agent fixture", () => {
     test("produces events from interleaved agents", () => {
       const events = translateFixture("multi-agent.ndjson");

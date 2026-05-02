@@ -18,7 +18,7 @@ const mulberry32 = (seed: number) => {
   };
 };
 
-const RELAY_TYPES = new Set(["text", "thinking", "tool_use", "tool_result", "session_meta", "turn_complete", "error"]);
+const RELAY_TYPES = new Set(["text", "thinking", "tool_use", "tool_result", "session_meta", "turn_complete", "error", "structured_output"]);
 
 const RAW_EVENT_TYPES = ["system", "assistant", "user", "result", "progress", "rate_limit_event", "unknown_future_type"] as const;
 const SUBTYPES = ["init", "result", "success", undefined, "weird_subtype"] as const;
@@ -125,6 +125,11 @@ const assertWellFormed = (event: TRelayEvent, raw: TClaudeEvent) => {
       break;
     case "error":
       expect(typeof event.message).toBe("string");
+      break;
+    case "structured_output":
+      // value can be any JSON-shaped runtime value (object, array, scalar,
+      // null). All we assert is presence; downstream consumers handle shape.
+      expect("value" in event).toBe(true);
       break;
     default: {
       // Forces a compile-time error if a new TRelayEvent variant ships
