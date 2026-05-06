@@ -130,8 +130,8 @@ describe("createSession", () => {
     const result = await session.ask("fix the bug");
 
     expect(result.costUsd).toBe(0.018);
-    expect(result.tokens.input).toBe(3500);
-    expect(result.tokens.output).toBe(120);
+    expect(result.tokensIn).toBe(3500);
+    expect(result.tokensOut).toBe(120);
     expect(costUpdates.length).toBeGreaterThan(0);
     expect(costUpdates[costUpdates.length - 1]!.totalUsd).toBe(0.018);
 
@@ -318,8 +318,8 @@ describe("createSession", () => {
     // Fields ls-prove reads off TAskResult:
     expect(typeof result.text).toBe("string");
     expect(typeof result.costUsd).toBe("number");
-    expect(typeof result.tokens.input).toBe("number");
-    expect(typeof result.tokens.output).toBe("number");
+    expect(typeof result.tokensIn).toBe("number");
+    expect(typeof result.tokensOut).toBe("number");
     expect(session.sessionId).toBeDefined();
 
     await session.close();
@@ -429,14 +429,9 @@ describe("createSession", () => {
     }
   });
 
-  test("askJson throws clear error when model emits thinking but no text", async () => {
+  test("askJson throws upfront when session was created without jsonSchema", async () => {
     const { JsonValidationError } = await import("@/json.js");
-    const thinkingOnlyLines = [
-      '{"type":"system","subtype":"init","session_id":"s1","model":"haiku","tools":[]}',
-      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"User wants JSON. I should produce {\\"x\\":1}."}]}}',
-      '{"type":"result","subtype":"success","session_id":"s1","result":"","is_error":false,"total_cost_usd":0.001,"duration_ms":300,"num_turns":1,"modelUsage":{}}',
-    ];
-    procFactory = () => createMockProcess(thinkingOnlyLines);
+    procFactory = () => createMockProcess([]);
 
     const createSession = await loadCreateSession();
     const session = createSession();
@@ -447,10 +442,9 @@ describe("createSession", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(JsonValidationError);
       const msg = (err as Error).message;
-      expect(msg).toMatch(/thinking/i);
-      expect(msg).toMatch(/no text/i);
-      // Session-specific guidance: hints at jsonSchema-at-creation OR stateless askJson.
-      expect(msg).toMatch(/session/i);
+      expect(msg).toMatch(/jsonSchema/);
+      expect(msg).toMatch(/createSession/);
+      expect(msg).toMatch(/claude\.askJson/);
     } finally {
       await session.close();
     }

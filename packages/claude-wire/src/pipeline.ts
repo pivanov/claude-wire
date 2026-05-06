@@ -65,14 +65,13 @@ export const dispatchToolDecision = async (
 // wants to carry forward what previous processes already spent -- stream
 // has no such concept and passes it undefined.
 export const applyTurnComplete = (event: TTurnCompleteEvent, costTracker: ICostTracker, offsets?: TCostSnapshot): void => {
-  const base = offsets ?? { totalUsd: 0, tokens: { input: 0, output: 0 } };
-  const cacheRead = event.cacheReadTokens !== undefined ? (base.tokens.cacheRead ?? 0) + event.cacheReadTokens : base.tokens.cacheRead;
-  const cacheCreation =
-    event.cacheCreationTokens !== undefined ? (base.tokens.cacheCreation ?? 0) + event.cacheCreationTokens : base.tokens.cacheCreation;
+  const base = offsets ?? { totalUsd: 0, tokensIn: 0, tokensOut: 0, tokensCacheRead: 0, tokensCacheCreation: 0 };
+  const cacheRead = event.cacheReadTokens !== undefined ? base.tokensCacheRead + event.cacheReadTokens : base.tokensCacheRead;
+  const cacheCreation = event.cacheCreationTokens !== undefined ? base.tokensCacheCreation + event.cacheCreationTokens : base.tokensCacheCreation;
   costTracker.update(
     base.totalUsd + (event.costUsd ?? 0),
-    base.tokens.input + (event.inputTokens ?? 0),
-    base.tokens.output + (event.outputTokens ?? 0),
+    base.tokensIn + (event.inputTokens ?? 0),
+    base.tokensOut + (event.outputTokens ?? 0),
     cacheRead,
     cacheCreation,
   );
@@ -107,7 +106,10 @@ export const buildResult = (events: TRelayEvent[], costTracker: ICostTracker, se
     thinking: extractThinking(events),
     structuredOutput: so?.value,
     costUsd: snap.totalUsd,
-    tokens: snap.tokens,
+    tokensIn: snap.tokensIn,
+    tokensOut: snap.tokensOut,
+    tokensCacheRead: snap.tokensCacheRead,
+    tokensCacheCreation: snap.tokensCacheCreation,
     duration: tc?.durationMs,
     sessionId,
     events,

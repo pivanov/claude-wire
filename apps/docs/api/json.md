@@ -25,14 +25,19 @@ console.log(raw.costUsd);     // 0.001
 
 ## `session.askJson(prompt, schema, options?)`
 
-Same API, but within a persistent session:
+Same API, but within a persistent session. The session must be created with `jsonSchema` so the long-lived CLI process is spawned with the strict `--json-schema` constraint -- `session.askJson()` throws `JsonValidationError` up front otherwise.
 
 ```ts
-const session = claude.session({ model: "sonnet" });
+import { standardSchemaToJsonSchema } from "@pivanov/claude-wire";
+
+const Schema = z.object({ exports: z.array(z.string()) });
+const jsonSchema = await standardSchemaToJsonSchema(Schema);
+
+const session = claude.session({ model: "sonnet", jsonSchema });
 
 const { data } = await session.askJson(
   "List the exports of src/index.ts as JSON",
-  z.object({ exports: z.array(z.string()) }),
+  Schema,
 );
 
 console.log(data.exports);
@@ -89,8 +94,8 @@ const derived = await standardSchemaToJsonSchema(myZodSchema);
 // derived: '{"type":"object","properties":{...}}' or undefined
 ```
 
-::: warning Sessions cannot auto-derive per call
-`session.askJson()` reads the session's existing CLI process; the `--json-schema` flag is fixed at session creation. Pass the schema as a string to `jsonSchema` on `claude.session({ jsonSchema: ... })` if you need native constraint, or use stateless `claude.askJson()` per call when each call has a different schema.
+::: warning `session.askJson()` requires `jsonSchema` at session creation
+`session.askJson()` reuses the session's long-lived CLI process; the `--json-schema` flag is fixed at session creation. **A session created without `jsonSchema` will throw `JsonValidationError` from `askJson()` up front** -- the SDK does not silently fall back to prompt-forced JSON. Pass the schema as a string to `jsonSchema` on `claude.session({ jsonSchema: ... })` for the strict path, or use stateless `claude.askJson()` per call when each call has a different schema.
 :::
 
 ::: tip `allowedTools` and `StructuredOutput`
@@ -153,7 +158,7 @@ try {
 
 ### Empty text with thinking content
 
-When the CLI emits a thinking block but no text block, both `claude.askJson` and `session.askJson` throw `JsonValidationError` with an actionable message naming the missing native constraint, instead of the misleading `"Unexpected end of JSON input"` from `JSON.parse("")`. The fix is to pass a `jsonSchema` string in options (stateless) or at session creation, or use a Standard Schema vendor that supports auto-derivation.
+When the CLI emits a thinking block but no text block, `claude.askJson` throws `JsonValidationError` with an actionable message naming the missing native constraint, instead of the misleading `"Unexpected end of JSON input"` from `JSON.parse("")`. The fix is to pass a `jsonSchema` string in options or use a Standard Schema vendor that supports auto-derivation. (`session.askJson` reaches the same conclusion earlier: it throws up front when the session was created without `jsonSchema`, before any turn runs.)
 
 ## Fence Stripping
 

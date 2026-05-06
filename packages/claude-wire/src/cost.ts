@@ -35,13 +35,16 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
   let totalUsd = 0;
   let input = 0;
   let output = 0;
-  let cacheRead: number | undefined;
-  let cacheCreation: number | undefined;
+  let cacheRead = 0;
+  let cacheCreation = 0;
   let turns = 0;
 
   const snapshot = (): TCostSnapshot => ({
     totalUsd,
-    tokens: { input, output, cacheRead, cacheCreation },
+    tokensIn: input,
+    tokensOut: output,
+    tokensCacheRead: cacheRead,
+    tokensCacheCreation: cacheCreation,
   });
 
   const update = (totalCostUsd: number, totalInputToks: number, totalOutputToks: number, cacheReadToks?: number, cacheCreationToks?: number) => {
@@ -49,8 +52,8 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
     input = totalInputToks;
     output = totalOutputToks;
     // Preserve last-known cache values when the turn doesn't report them
-    // (e.g. the CLI omits modelUsage). Replacing with undefined would lose
-    // history the consumer has already been shown.
+    // (e.g. the CLI omits modelUsage). Keeping the previous value avoids
+    // showing 0 for a metric the consumer has already been shown.
     if (cacheReadToks !== undefined) {
       cacheRead = cacheReadToks;
     }
@@ -78,8 +81,8 @@ export const createCostTracker = (options: ICostTrackerOptions = {}): ICostTrack
     totalUsd = 0;
     input = 0;
     output = 0;
-    cacheRead = undefined;
-    cacheCreation = undefined;
+    cacheRead = 0;
+    cacheCreation = 0;
     turns = 0;
   };
 

@@ -47,7 +47,8 @@ Other:
   -v, --version         Print version and exit.
 
 Output (stdout, single JSON line):
-  { "data": <validated>, "costUsd": <n>, "tokens": { "input": n, "output": n },
+  { "data": <validated>, "costUsd": <n>, "tokensIn": <n>, "tokensOut": <n>,
+    "tokensCacheRead": <n>, "tokensCacheCreation": <n>,
     "durationMs": <n>, "sessionId": "..." }
 
 Exit codes:
@@ -170,7 +171,10 @@ const runAskJson = async (io: ICliIo, args: IAskJsonArgs): Promise<void> => {
     `${JSON.stringify({
       data: result.data,
       costUsd: result.raw.costUsd,
-      tokens: { input: result.raw.tokens.input, output: result.raw.tokens.output },
+      tokensIn: result.raw.tokensIn,
+      tokensOut: result.raw.tokensOut,
+      tokensCacheRead: result.raw.tokensCacheRead,
+      tokensCacheCreation: result.raw.tokensCacheCreation,
       durationMs: result.raw.duration,
       sessionId: result.raw.sessionId,
     })}\n`,

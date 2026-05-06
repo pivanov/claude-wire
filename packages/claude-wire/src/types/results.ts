@@ -1,23 +1,11 @@
 import type { TRelayEvent } from "./events.js";
 
-// Unified token shape shared between TAskResult and TCostSnapshot.
-// Previously TCostSnapshot used { inputTokens, outputTokens } while
-// TAskResult used { tokens: { input, output } } -- two names for the
-// same concept. Consolidated to the shorter form everywhere.
-//
-// `input` is the total of all input tokens (base + cache read + cache creation).
-// `cacheRead` and `cacheCreation` break out the cached portions so callers
-// can verify prompt caching is working and compute accurate billing.
-export type TTokens = {
-  input: number;
-  output: number;
-  cacheRead?: number;
-  cacheCreation?: number;
-};
-
 export type TCostSnapshot = {
   totalUsd: number;
-  tokens: TTokens;
+  tokensIn: number;
+  tokensOut: number;
+  tokensCacheRead: number;
+  tokensCacheCreation: number;
 };
 
 export type TAskResult = {
@@ -34,7 +22,10 @@ export type TAskResult = {
   // the model didn't produce a structured value.
   structuredOutput?: unknown;
   costUsd: number;
-  tokens: TTokens;
+  tokensIn: number;
+  tokensOut: number;
+  tokensCacheRead: number;
+  tokensCacheCreation: number;
   // Undefined when the CLI closed stdout without sending a `turn_complete`
   // (aborted/partial runs). Previously coerced to 0, which looked like a
   // legitimately-measured 0ms turn.

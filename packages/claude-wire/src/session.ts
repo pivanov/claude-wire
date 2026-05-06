@@ -104,7 +104,7 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   let currentSessionId: string | undefined;
   let consecutiveCrashes = 0;
   let turnCount = 0;
-  let costOffsets = { totalUsd: 0, tokens: { input: 0, output: 0 } };
+  let costOffsets = { totalUsd: 0, tokensIn: 0, tokensOut: 0, tokensCacheRead: 0, tokensCacheCreation: 0 };
   const translator = createTranslator();
   const costTracker = createCostTracker({
     maxCostUsd: options.maxCostUsd,
@@ -360,26 +360,19 @@ export const createSession = (options: ISessionOptions = {}): IClaudeSession => 
   };
 
   const askJson = async <T>(prompt: string, schema: TSchemaInput<T>, askOpts?: IAskOptions): Promise<IJsonResult<T>> => {
+    if (!options.jsonSchema) {
+      throw new JsonValidationError(
+        "session.askJson() requires `jsonSchema` (JSON Schema string) at createSession() so the CLI is spawned with --json-schema and --tools StructuredOutput, the strict-output path. Without it, askJson would silently degrade to prompt-forced JSON + JS validation. Either pass `jsonSchema` at createSession, or use stateless `claude.askJson(prompt, schema)` which auto-derives the JSON Schema per call from Standard Schema vendors (Zod 4+, Valibot, ArkType).",
+        "",
+        [{ message: "session created without jsonSchema" }],
+      );
+    }
     const raw = await ask(prompt, askOpts);
-    // Same precedence as client.askJson: prefer the structured_output
-    // channel when present. Sessions can opt into this by passing
-    // `jsonSchema` (string) at session creation, after which every ask
-    // returns the constrained value here.
+    // Prefer the structured_output channel: text can carry Stop-hook nags or
+    // partial commentary that would corrupt parseAndValidate.
     if (raw.structuredOutput !== undefined) {
       const data = await parseAndValidate(JSON.stringify(raw.structuredOutput), schema);
       return { data, raw };
-    }
-    // Sessions cannot change `--json-schema` per ask: the flag is bound to
-    // the long-lived process spawned at session creation. If the model
-    // emits thinking with no text, the cause is almost always a session
-    // started without `jsonSchema`. Surface that with a clear error rather
-    // than the generic "Unexpected EOF" parseAndValidate would emit.
-    if (raw.text === "" && raw.thinking !== "") {
-      throw new JsonValidationError(
-        "Model produced a thinking block but no text content. The session was started without a `jsonSchema` to constrain CLI output. Pass `jsonSchema` (JSON Schema string) at session creation, or use stateless `claude.askJson()` which auto-derives JSON Schema from Standard Schema vendors (Zod 4+, Valibot, ArkType).",
-        "",
-        [{ message: "empty text response" }],
-      );
     }
     const data = await parseAndValidate(raw.text, schema);
     return { data, raw };

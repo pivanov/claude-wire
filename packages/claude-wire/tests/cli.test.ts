@@ -169,7 +169,7 @@ describe("cli runCli", () => {
     const payload = JSON.parse(lines[0] ?? "");
     expect(payload.data).toEqual({ ok: true, answer: "hello" });
     expect(payload).toHaveProperty("costUsd", 0.012);
-    expect(payload.tokens.input).toBeGreaterThan(0);
+    expect(payload.tokensIn).toBeGreaterThan(0);
     expect(payload.durationMs).toBe(1800);
     expect(payload.sessionId).toBe("sess-json");
   });

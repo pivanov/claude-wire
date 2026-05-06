@@ -69,8 +69,8 @@ const result = await claude.ask("Refactor the auth module", {
   maxCostUsd: 0.50,
   onCostUpdate: (cost) => {
     console.log(`$${cost.totalUsd.toFixed(4)} spent so far`);
-    if (cost.tokens.cacheRead) {
-      console.log(`${cost.tokens.cacheRead} tokens served from cache`);
+    if (cost.tokensCacheRead) {
+      console.log(`${cost.tokensCacheRead} tokens served from cache`);
     }
   },
 });

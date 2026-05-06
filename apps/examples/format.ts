@@ -29,9 +29,9 @@ export const result = (key: string, value: string | number | Record<string, unkn
   console.log(`  ${green("\u2714")} ${cyan(key)} ${formatted}`);
 };
 
-export const stats = (r: { costUsd: number; tokens: { input: number; output: number }; duration: number; sessionId?: string }) => {
+export const stats = (r: { costUsd: number; tokensIn: number; tokensOut: number; duration: number; sessionId?: string }) => {
   result("Cost", `$${r.costUsd.toFixed(4)}`);
-  result("Tokens", `${r.tokens.input} in / ${r.tokens.output} out`);
+  result("Tokens", `${r.tokensIn} in / ${r.tokensOut} out`);
   result("Duration", `${r.duration}ms`);
   if (r.sessionId) {
     result("Session", r.sessionId);

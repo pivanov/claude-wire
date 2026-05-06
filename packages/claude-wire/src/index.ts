@@ -50,7 +50,7 @@ export type {
 } from "./types/events.js";
 export type { IAskOptions, IClaudeOptions, ISessionOptions, IToolHandler } from "./types/options.js";
 export type { TClaudeContent, TClaudeContentType, TClaudeEvent, TClaudeEventType, TClaudeMessage, TModelUsageEntry } from "./types/protocol.js";
-export type { TAskResult, TCostSnapshot, TTokens } from "./types/results.js";
+export type { TAskResult, TCostSnapshot } from "./types/results.js";
 export type { TWarn } from "./warnings.js";
 export { writer } from "./writer.js";
 

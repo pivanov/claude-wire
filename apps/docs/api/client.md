@@ -21,12 +21,10 @@ type TAskResult = {
   thinking: string;                    // concatenated thinking content (empty when none emitted)
   structuredOutput?: unknown;          // schema-constrained value when --json-schema was set
   costUsd: number;                     // total cost in USD
-  tokens: {
-    input: number;                     // total input (base + cache read + cache creation)
-    output: number;
-    cacheRead?: number;                // tokens read from prompt cache
-    cacheCreation?: number;            // tokens written to prompt cache
-  };
+  tokensIn: number;                    // total input (base + cache read + cache creation)
+  tokensOut: number;
+  tokensCacheRead: number;             // tokens read from prompt cache (defaults to 0)
+  tokensCacheCreation: number;         // tokens written to prompt cache (defaults to 0)
   duration: number | undefined;        // ms
   sessionId?: string;
   events: TRelayEvent[];               // all events

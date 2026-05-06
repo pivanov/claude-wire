@@ -26,7 +26,7 @@ Track spending in real time with `onCostUpdate`:
 const result = await claude.ask("Complex task", {
   onCostUpdate: (cost) => {
     console.log(`$${cost.totalUsd.toFixed(4)} spent`);
-    console.log(`${cost.tokens.input} input, ${cost.tokens.output} output tokens`);
+    console.log(`${cost.tokensIn} input, ${cost.tokensOut} output tokens`);
   },
 });
 ```
@@ -38,18 +38,16 @@ The callback fires after each `turn_complete` event.
 ```ts
 type TCostSnapshot = {
   totalUsd: number;
-  tokens: {
-    input: number;            // total input tokens (base + cache read + cache creation)
-    output: number;
-    cacheRead?: number;       // tokens read from prompt cache (~10% billing rate)
-    cacheCreation?: number;   // tokens written to prompt cache (~125% billing rate)
-  };
+  tokensIn: number;             // total input tokens (base + cache read + cache creation)
+  tokensOut: number;
+  tokensCacheRead: number;      // tokens read from prompt cache (~10% billing rate)
+  tokensCacheCreation: number;  // tokens written to prompt cache (~125% billing rate)
 };
 ```
 
 The cost tracker uses assignment semantics, not accumulation. All values come from the wire protocol as running totals -- the cost tracker stores the latest snapshot. `totalUsd` is assigned from Claude Code's `total_cost_usd`, and token counts are assigned from the cumulative values reported by the wire protocol.
 
-`cacheRead` and `cacheCreation` are present when the CLI reports prompt cache data. Use `cacheRead` to verify that prompt caching is working -- if it's non-zero, your system prompt is being served from cache.
+`tokensCacheRead` and `tokensCacheCreation` default to `0` when the CLI doesn't report prompt cache data. Use `tokensCacheRead` to verify that prompt caching is working -- if it's non-zero, your system prompt is being served from cache.
 
 In sessions, cost survives process respawns via an internal offset mechanism.
 
@@ -92,7 +90,7 @@ const tracker = createCostTracker({
 tracker.update(0.05, 1000, 50);           // totalCostUsd, totalInputTokens, totalOutputTokens
 tracker.update(0.08, 2000, 100, 500, 0); // ...optional cacheReadTokens, cacheCreationTokens
 tracker.checkBudget();                     // throws if over limit
-console.log(tracker.snapshot());           // { totalUsd, tokens: { input, output, cacheRead?, cacheCreation? } }
+console.log(tracker.snapshot());           // { totalUsd, tokensIn, tokensOut, tokensCacheRead, tokensCacheCreation }
 tracker.reset();                    // zero everything
 ```
 

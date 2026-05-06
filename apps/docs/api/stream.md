@@ -47,7 +47,7 @@ Consumes the stream and returns the final cost snapshot.
 
 ```ts
 const cost = await claude.stream("Hello").cost();
-console.log(cost.totalUsd, cost.tokens.input, cost.tokens.output);
+console.log(cost.totalUsd, cost.tokensIn, cost.tokensOut);
 ```
 
 ### `.result()`

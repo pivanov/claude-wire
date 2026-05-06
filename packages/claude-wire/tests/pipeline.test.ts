@@ -61,7 +61,10 @@ describe("buildResult", () => {
     expect(result.text).toBe("answer");
     expect(result.thinking).toBe("pondering");
     expect(result.costUsd).toBe(0.01);
-    expect(result.tokens).toEqual({ input: 100, output: 20 });
+    expect(result.tokensIn).toBe(100);
+    expect(result.tokensOut).toBe(20);
+    expect(result.tokensCacheRead).toBe(0);
+    expect(result.tokensCacheCreation).toBe(0);
     expect(result.duration).toBe(500);
     expect(result.sessionId).toBe("sess-1");
     expect(result.events).toHaveLength(3);
@@ -93,30 +96,36 @@ describe("applyTurnComplete", () => {
       tracker,
     );
     const snap = tracker.snapshot();
-    expect(snap.tokens.cacheRead).toBe(3000);
-    expect(snap.tokens.cacheCreation).toBe(200);
+    expect(snap.tokensCacheRead).toBe(3000);
+    expect(snap.tokensCacheCreation).toBe(200);
   });
 
   test("adds offsets to cache tokens", () => {
     const tracker = createCostTracker();
     applyTurnComplete({ type: "turn_complete", costUsd: 0.01, inputTokens: 1000, outputTokens: 50, cacheReadTokens: 500 }, tracker, {
       totalUsd: 0.005,
-      tokens: { input: 2000, output: 100, cacheRead: 1000, cacheCreation: 100 },
+      tokensIn: 2000,
+      tokensOut: 100,
+      tokensCacheRead: 1000,
+      tokensCacheCreation: 100,
     });
     const snap = tracker.snapshot();
-    expect(snap.tokens.input).toBe(3000);
-    expect(snap.tokens.cacheRead).toBe(1500);
-    expect(snap.tokens.cacheCreation).toBe(100);
+    expect(snap.tokensIn).toBe(3000);
+    expect(snap.tokensCacheRead).toBe(1500);
+    expect(snap.tokensCacheCreation).toBe(100);
   });
 
   test("preserves offset cache tokens when event has none", () => {
     const tracker = createCostTracker();
     applyTurnComplete({ type: "turn_complete", costUsd: 0.01, inputTokens: 1000, outputTokens: 50 }, tracker, {
       totalUsd: 0.005,
-      tokens: { input: 2000, output: 100, cacheRead: 1000 },
+      tokensIn: 2000,
+      tokensOut: 100,
+      tokensCacheRead: 1000,
+      tokensCacheCreation: 0,
     });
     const snap = tracker.snapshot();
-    expect(snap.tokens.cacheRead).toBe(1000);
+    expect(snap.tokensCacheRead).toBe(1000);
   });
 });
 

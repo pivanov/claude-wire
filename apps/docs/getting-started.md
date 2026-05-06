@@ -33,7 +33,8 @@ const result = await claude.ask("What is 2 + 2?", {
 
 console.log(result.text);       // "4"
 console.log(result.costUsd);    // 0.0012
-console.log(result.tokens);     // { input: 42, output: 8 }
+console.log(result.tokensIn);   // 42
+console.log(result.tokensOut);  // 8
 console.log(result.duration);   // 1200
 ```
 
@@ -87,7 +88,7 @@ console.log(data.score);   // 82
 
 `askJson()` accepts any [Standard Schema](https://github.com/standard-schema/standard-schema) object (Zod, Valibot, ArkType) or a raw JSON Schema string. It returns `{ data: T, raw: TAskResult }`. Throws `JsonValidationError` if parsing or validation fails.
 
-Also available on sessions: `session.askJson(prompt, schema)`.
+Also available on sessions: `session.askJson(prompt, schema)` -- requires `jsonSchema` at session creation, see [API: session.askJson](/api/session#sessionaskjson).
 
 ::: tip Stateless classifiers
 For one-shot classification or extraction where each call is independent, use `claude.askJson()` directly -- not a session. See [Stateless Classifier Pattern](/guides/classifier).

@@ -62,7 +62,7 @@ echo "Summarize this" | npx @pivanov/claude-wire ask-json \
   --model haiku
 ```
 
-Success emits a single JSON line on stdout (`{ data, costUsd, tokens, durationMs, sessionId }`). Errors go to stderr as `{ error, code }` with exit codes `1` (json-validation), `2` (process), `3` (budget-exceeded), `4` (invalid-args). Run `npx @pivanov/claude-wire --help` for the full flag list.
+Success emits a single JSON line on stdout (`{ data, costUsd, tokensIn, tokensOut, tokensCacheRead, tokensCacheCreation, durationMs, sessionId }`). Errors go to stderr as `{ error, code }` with exit codes `1` (json-validation), `2` (process), `3` (budget-exceeded), `4` (invalid-args). Run `npx @pivanov/claude-wire --help` for the full flag list.
 
 ## Documentation
 

@@ -59,12 +59,16 @@ Same SDK-side validation as `claude.askJson()` but within a session. The respons
 
 ```ts
 import { z } from "zod";
+import { standardSchemaToJsonSchema } from "@pivanov/claude-wire";
 
-const session = claude.session({ model: "sonnet" });
+const Files = z.object({ files: z.array(z.object({ name: z.string(), bytes: z.number() })) });
+const jsonSchema = await standardSchemaToJsonSchema(Files);
+
+const session = claude.session({ model: "sonnet", jsonSchema });
 
 const { data } = await session.askJson(
   "What are the top 3 files by size? Return JSON: { files: { name: string, bytes: number }[] }",
-  z.object({ files: z.array(z.object({ name: z.string(), bytes: z.number() })) }),
+  Files,
 );
 
 console.log(data.files);
@@ -74,13 +78,11 @@ await session.close();
 
 Accepts the same schema inputs as `claude.askJson()` -- Standard Schema objects or raw JSON Schema strings. Throws `JsonValidationError` on parse/validation failure.
 
-::: warning Sessions cannot auto-derive `--json-schema` per ask
-The CLI's `--json-schema` flag is bound to the long-lived process spawned at session creation. Unlike `claude.askJson()` (stateless), `session.askJson()` cannot pass a fresh JSON Schema to the CLI per call. If you need native CLI constraint:
+::: warning `session.askJson()` requires `jsonSchema` at session creation
+The CLI's `--json-schema` flag is bound to the long-lived process spawned at session creation, so the strict-output path is only available when `jsonSchema` was set. **Calling `session.askJson()` on a session created without `jsonSchema` throws `JsonValidationError` up front** -- we don't silently fall back to prompt-forced JSON, because the API name promises strict validation.
 
-- One schema per session: pass `jsonSchema: '{"type":"object",...}'` (a JSON Schema string) at session creation. Use `standardSchemaToJsonSchema()` to derive it from a Standard Schema object.
-- Many schemas: use stateless `claude.askJson()` per call (auto-derives) or maintain a session-per-schema cache.
-
-When a session was started without `jsonSchema` and the model emits a thinking block with no text content, `session.askJson()` throws `JsonValidationError` with guidance instead of the misleading `Unexpected EOF` from `JSON.parse("")`. See [JSON: empty text with thinking](./json.md#empty-text-with-thinking-content).
+- **One schema per session:** pass `jsonSchema: '{"type":"object",...}'` (a JSON Schema string) at session creation. Use `standardSchemaToJsonSchema()` to derive it from a Standard Schema object.
+- **Many schemas:** use stateless `claude.askJson()` per call (auto-derives) or pool one session per schema.
 :::
 
 **Returns:** `Promise<IJsonResult<T>>`

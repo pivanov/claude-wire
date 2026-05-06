@@ -67,10 +67,10 @@ describe("createStream", () => {
 
     // Fixture total_cost_usd = 0.018
     expect(cost.totalUsd).toBe(0.018);
-    // tokens.input = 500 + 3000 (cacheRead) = 3500
-    expect(cost.tokens.input).toBe(3500);
-    // tokens.output = 120
-    expect(cost.tokens.output).toBe(120);
+    // tokensIn = 500 + 3000 (cacheRead) = 3500
+    expect(cost.tokensIn).toBe(3500);
+    // tokensOut = 120
+    expect(cost.tokensOut).toBe(120);
   });
 
   test("result() returns full TAskResult", async () => {
@@ -81,8 +81,8 @@ describe("createStream", () => {
 
     expect(result.text).toContain("Fixed!");
     expect(result.costUsd).toBe(0.018);
-    expect(result.tokens.input).toBe(3500);
-    expect(result.tokens.output).toBe(120);
+    expect(result.tokensIn).toBe(3500);
+    expect(result.tokensOut).toBe(120);
     expect(result.duration).toBe(8500);
     expect(result.sessionId).toBe("sess-1");
     expect(result.events.length).toBeGreaterThan(0);

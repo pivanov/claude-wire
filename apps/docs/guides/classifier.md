@@ -58,17 +58,17 @@ Each `claude.askJson()` call spawns a fresh process -- no history carry-over, no
 
 ## Verifying prompt caching
 
-Check `raw.tokens.cacheRead` to confirm the system prompt is being cached across calls:
+Check `raw.tokensCacheRead` to confirm the system prompt is being cached across calls:
 
 ```ts
 const { data, raw } = await claude.askJson(text, Schema, options);
 
-console.log(raw.tokens.input);         // total input tokens (includes cached)
-console.log(raw.tokens.cacheRead);     // tokens read from cache (billed at ~10%)
-console.log(raw.tokens.cacheCreation); // tokens written to cache (billed at ~125%)
+console.log(raw.tokensIn);             // total input tokens (includes cached)
+console.log(raw.tokensCacheRead);      // tokens read from cache (billed at ~10%)
+console.log(raw.tokensCacheCreation);  // tokens written to cache (billed at ~125%)
 ```
 
-If `cacheRead` is non-zero, the system prompt is being served from Anthropic's prompt cache. For a static 5k-token system prompt on repeated calls, cache hits cut input billing significantly.
+If `tokensCacheRead` is non-zero, the system prompt is being served from Anthropic's prompt cache. For a static 5k-token system prompt on repeated calls, cache hits cut input billing significantly.
 
 ## Cold start trade-off
 

@@ -1,6 +1,6 @@
 {
   "name": "@pivanov/claude-wire",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Run Claude Code programmatically. Typed SDK for spawning, streaming, and controlling the CLI.",
   "type": "module",
   "engines": {
