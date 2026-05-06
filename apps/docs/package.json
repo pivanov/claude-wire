@@ -6,9 +6,13 @@
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
-    "preview": "vitepress preview"
+    "preview": "vitepress preview",
+    "og:build": "bun scripts/build-og.ts",
+    "hero:build": "bun scripts/build-hero-code-svg.ts"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "sharp": "^0.34.5",
     "vitepress": "~1.5.0"
   }
 }

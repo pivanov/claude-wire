@@ -12,15 +12,41 @@
   --vp-c-brand-3: #4f46e5;
 }
 
+/* Hero is a 680x348 terminal-style SVG. Max-width matches its native
+   width so it isn't upscaled (which would blur the monospace text);
+   height auto-derives via the SVG's viewBox aspect ratio. */
 .VPHero .VPImage {
-  max-width: 560px !important;
-  max-height: 380px !important;
+  max-width: 680px !important;
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 12px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 32px -12px rgba(0, 0, 0, 0.5),
+    0 4px 12px -6px rgba(0, 0, 0, 0.4);
 }
 
+/* Vertically center the left column (name/text/tagline/actions) against
+   the right hero SVG. Vitepress's defaults are tuned for a circular
+   hero portrait inside a fixed 392x392 container with negative margins
+   pulling the image up by 108px and a translate(-32px,-32px) on the
+   inner container - none of which match a 680x328 code panel. We
+   neutralize all three so the SVG renders at native size and
+   `align-items: center` on the row-flex container does its job. */
 @media (min-width: 960px) {
-  .VPHero .VPImage {
-    max-width: 560px !important;
-    max-height: 380px !important;
+  .VPHero.VPHomeHero .container {
+    align-items: center !important;
+  }
+
+  .VPHero.VPHomeHero .image {
+    margin: 0 !important;
+    min-height: 0 !important;
+  }
+
+  .VPHero.VPHomeHero .image-container {
+    width: auto !important;
+    height: auto !important;
+    transform: none !important;
   }
 
   .VPHero .name {

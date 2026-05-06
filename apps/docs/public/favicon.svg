@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  claude-wire favicon. Gradient-bordered rounded square matching the
+  OG image frame, with a single centered `>` chevron. The chevron's
+  tip sits at the visual centre (x=20) so the glyph feels balanced
+  inside the body. 32x32 viewBox; tested at 16x16.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="cw-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d0a22"/>
+      <stop offset="100%" stop-color="#040217"/>
+    </linearGradient>
+    <linearGradient id="cw-border" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="35%" stop-color="#6366f1"/>
+      <stop offset="70%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#d946ef"/>
+    </linearGradient>
+    <linearGradient id="cw-glyph" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e0e7ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Filled body -->
+  <rect x="2" y="2" width="28" height="28" rx="7" ry="7" fill="url(#cw-bg)"/>
+
+  <!-- Gradient frame stroke -->
+  <rect x="2.5" y="2.5" width="27" height="27" rx="6.5" ry="6.5" fill="none" stroke="url(#cw-border)" stroke-width="1.6"/>
+
+  <!-- Centered chevron -->
+  <path
+    d="M 12 11 L 20 16 L 12 21"
+    fill="none"
+    stroke="url(#cw-glyph)"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

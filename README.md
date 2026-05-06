@@ -1,4 +1,4 @@
-# claude-wire
+# @pivanov/claude-wire
 
 Run [Claude Code](https://claude.ai/download) programmatically from TypeScript.
 
@@ -27,7 +27,7 @@ console.log(result.costUsd);  // 0.0084
 - **Typed errors** - rate-limit, overload, context-length, retry-exhausted as `KnownError` codes
 - **Fully typed** - discriminated union events, full IntelliSense
 - **Resilient** - auto-respawn with backoff, transient error detection, AbortSignal
-- **Zero dependencies** - ~9 kB minified+gzipped (bundle), ~42 kB npm tarball
+- **Zero dependencies**
 - **Subpath exports** - `/errors`, `/parser`, `/testing` for narrower imports and bundle-isolated test helpers
 
 ## Install

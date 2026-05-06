@@ -1,11 +1,51 @@
-import { defineConfig } from "vitepress";
+import { defineConfig, type HeadConfig } from "vitepress";
+
+const SITE_URL = "https://pivanov.github.io/claude-wire";
+const OG_IMAGE = `${SITE_URL}/og.png`;
+const SITE_TITLE = "claude-wire";
+const SITE_DESCRIPTION = "Run Claude Code programmatically from TypeScript. Strict JSON, sessions, streaming.";
 
 export default defineConfig({
-  title: "claude-wire",
-  description: "TypeScript SDK for Claude Code - spawn, stream, control",
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
   base: "/claude-wire/",
 
-  head: [["meta", { name: "keywords", content: "claude code, sdk, typescript, streaming, ndjson, anthropic, agent" }]],
+  head: [
+    ["link", { rel: "icon", type: "image/svg+xml", href: "/claude-wire/favicon.svg" }],
+    ["link", { rel: "apple-touch-icon", href: "/claude-wire/favicon.svg" }],
+    ["link", { rel: "mask-icon", href: "/claude-wire/favicon.svg", color: "#a855f7" }],
+    ["meta", { name: "theme-color", content: "#181825" }],
+    [
+      "meta",
+      {
+        name: "keywords",
+        content: "claude code, sdk, typescript, streaming, ndjson, anthropic, agent",
+      },
+    ],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:title", content: SITE_TITLE }],
+    ["meta", { property: "og:description", content: SITE_DESCRIPTION }],
+    ["meta", { property: "og:image", content: OG_IMAGE }],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    ["meta", { property: "og:url", content: SITE_URL }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:title", content: SITE_TITLE }],
+    ["meta", { name: "twitter:description", content: SITE_DESCRIPTION }],
+    ["meta", { name: "twitter:image", content: OG_IMAGE }],
+  ],
+
+  transformPageData(pageData) {
+    const title = pageData.title ? `${pageData.title} · ${SITE_TITLE}` : SITE_TITLE;
+    const description = pageData.description || SITE_DESCRIPTION;
+    pageData.frontmatter.head ??= [] as HeadConfig[];
+    (pageData.frontmatter.head as HeadConfig[]).push(
+      ["meta", { property: "og:title", content: title }],
+      ["meta", { property: "og:description", content: description }],
+      ["meta", { name: "twitter:title", content: title }],
+      ["meta", { name: "twitter:description", content: description }],
+    );
+  },
 
   markdown: {
     theme: {
@@ -72,11 +112,6 @@ export default defineConfig({
 
     search: {
       provider: "local",
-    },
-
-    footer: {
-      message: 'Not affiliated with or endorsed by Anthropic. Supported by <a href="https://logicstar.ai/">LogicStar AI</a>.',
-      copyright: "MIT License | Made by Pavel Ivanov",
     },
   },
 });
